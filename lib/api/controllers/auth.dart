@@ -10,18 +10,10 @@ class AuthController {
     required String password,
     required String batchId,
     required String trainingId,
-    required String jenisKelamin, // Nilai dari UI: "Laki-laki" atau "Perempuan"
+    required String jenisKelamin,
   }) async {
-    // --- MAPPING JENIS KELAMIN KE KETENTUAN BACKEND (L/P) ---
-    String genderCode = "L"; // Default
-    if (jenisKelamin == "Perempuan") {
-      genderCode = "P";
-    } else if (jenisKelamin == "Laki-laki") {
-      genderCode = "L";
-    } else {
-      // Jika UI mengirim "L" atau "P" secara langsung, gunakan nilai tersebut
-      genderCode = jenisKelamin;
-    }
+    // Mapping gender
+    String genderCode = (jenisKelamin == "Perempuan") ? "P" : "L";
 
     final response = await ApiService.register(
       name: name,
@@ -29,32 +21,22 @@ class AuthController {
       password: password,
       batchId: batchId,
       trainingId: trainingId,
-      jenisKelamin: genderCode, // Kirim hasil mapping (L/P)
+      jenisKelamin: genderCode,
     );
 
     if (response.statusCode == 200 || response.statusCode == 201) {
       final result = welcomeFromJson(response.body);
-
       final token = result.data?.token;
-      if (token != null) {
-        await AuthPreferences.saveToken(token);
-      }
+      final userData = result.data?.user;
 
+      if (token != null && userData != null) {
+        // Simpan Map dari model User ke Preferences
+        await AuthPreferences.saveAuthData(token, userData.toJson());
+      }
       return result;
     } else {
-      final error = jsonDecode(response.body);
-
-      // Mengambil detail error spesifik jika ada (opsional)
-      String errorMessage = error["message"] ?? "Register gagal";
-
-      // Jika backend mengirim detail error dalam object "errors"
-      if (error["errors"] != null) {
-        // Contoh: mengambil error pertama dari salah satu field
-        var validationErrors = error["errors"] as Map<String, dynamic>;
-        errorMessage = validationErrors.values.first[0].toString();
-      }
-
-      throw Exception(errorMessage);
+      _handleError(response.body, "Register gagal");
+      return null;
     }
   }
 
@@ -66,16 +48,37 @@ class AuthController {
 
     if (response.statusCode == 200 || response.statusCode == 201) {
       final result = welcomeFromJson(response.body);
-
       final token = result.data?.token;
-      if (token != null) {
-        await AuthPreferences.saveToken(token);
-      }
+      final userData = result.data?.user;
 
+      if (token != null && userData != null) {
+        await AuthPreferences.saveAuthData(token, userData.toJson());
+      }
       return result;
     } else {
-      final error = jsonDecode(response.body);
-      throw Exception(error["message"] ?? "Login gagal");
+      _handleError(response.body, "Login gagal");
+      return null;
+    }
+  }
+
+  // Fungsi pembantu untuk parsing error agar kode tidak duplikat
+  static void _handleError(String responseBody, String defaultMessage) {
+    try {
+      final error = jsonDecode(responseBody);
+      String errorMessage = error["message"] ?? defaultMessage;
+
+      if (error["errors"] != null) {
+        var validationErrors = error["errors"] as Map<String, dynamic>;
+        // Ambil pesan validasi pertama jika ada
+        errorMessage = validationErrors.values.first[0].toString();
+      }
+      throw Exception(errorMessage);
+    } catch (e) {
+      throw Exception(
+        e is Exception
+            ? e.toString().replaceAll("Exception: ", "")
+            : defaultMessage,
+      );
     }
   }
 }

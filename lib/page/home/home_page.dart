@@ -1,10 +1,8 @@
-import 'package:absensi_raditya/page/login/login.dart';
+import 'package:absensi_raditya/page/home/profile.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:intl/intl.dart';
-
-// PERBAIKAN: Pastikan ejaan file controller benar (pakai double 't')
 import 'package:absensi_raditya/api/controllers/attendance_controller.dart';
 import 'package:absensi_raditya/api/preferences.dart';
 
@@ -20,6 +18,10 @@ class _HomePageState extends State<HomePage> {
   bool isLoading = false;
   bool isAlreadyCheckIn = false;
 
+  // Tema sesuai Logo
+  final Color primaryBlue = const Color(0xFF005DA9);
+  final Color secondaryYellow = const Color(0xFFFFCC00);
+
   @override
   void initState() {
     super.initState();
@@ -31,6 +33,7 @@ class _HomePageState extends State<HomePage> {
     setState(() => userToken = token);
   }
 
+  // --- FUNGSI YANG ERROR TADI (PASTIKAN ADA DI SINI) ---
   Future<Position> _getGeoLocation() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) return Future.error('GPS Anda mati, harap nyalakan.');
@@ -38,9 +41,8 @@ class _HomePageState extends State<HomePage> {
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
+      if (permission == LocationPermission.denied)
         return Future.error('Izin lokasi ditolak.');
-      }
     }
     return await Geolocator.getCurrentPosition();
   }
@@ -49,13 +51,10 @@ class _HomePageState extends State<HomePage> {
     setState(() => isLoading = true);
     try {
       Position pos = await _getGeoLocation();
-
-      // Mengambil alamat dari koordinat
       List<Placemark> marks = await placemarkFromCoordinates(
         pos.latitude,
         pos.longitude,
       );
-
       Placemark place = marks[0];
       String address =
           "${place.street}, ${place.locality}, ${place.subAdministrativeArea}";
@@ -63,36 +62,38 @@ class _HomePageState extends State<HomePage> {
       String date = DateFormat('yyyy-MM-dd').format(DateTime.now());
       String time = DateFormat('HH:mm').format(DateTime.now());
 
+      Map<String, dynamic> data = {
+        "attendance_date": date,
+        isCheckIn ? "check_in" : "check_out": time,
+        "${isCheckIn ? 'check_in' : 'check_out'}_lat": pos.latitude,
+        "${isCheckIn ? 'check_in' : 'check_out'}_lng": pos.longitude,
+        "${isCheckIn ? 'check_in' : 'check_out'}_location":
+            "${pos.latitude},${pos.longitude}",
+        "${isCheckIn ? 'check_in' : 'check_out'}_address": address,
+      };
+
       if (isCheckIn) {
-        await AttendanceController.checkIn({
-          "attendance_date": date,
-          "check_in": time,
-          "check_in_lat": pos.latitude,
-          "check_in_lng": pos.longitude,
-          "check_in_location": "${pos.latitude},${pos.longitude}",
-          "check_in_address": address,
-          "status": "masuk",
-        });
+        data["status"] = "masuk";
+        await AttendanceController.checkIn(data);
         setState(() => isAlreadyCheckIn = true);
       } else {
-        await AttendanceController.checkOut({
-          "attendance_date": date,
-          "check_out": time,
-          "check_out_lat": pos.latitude,
-          "check_out_lng": pos.longitude,
-          "check_out_location": "${pos.latitude},${pos.longitude}",
-          "check_out_address": address,
-        });
+        await AttendanceController.checkOut(data);
         setState(() => isAlreadyCheckIn = false);
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Berhasil ${isCheckIn ? 'Masuk' : 'Keluar'}!")),
+        SnackBar(
+          content: Text("Berhasil ${isCheckIn ? 'Check In' : 'Check Out'}!"),
+          backgroundColor: Colors.green,
+        ),
       );
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Error: ${e.toString()}"),
+          backgroundColor: Colors.red,
+        ),
+      );
     } finally {
       setState(() => isLoading = false);
     }
@@ -101,42 +102,46 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF4F7FA),
       appBar: AppBar(
-        title: const Text("Absensi Raditya"),
+        elevation: 0,
+        backgroundColor: Colors.white,
+        title: Text(
+          "Absensi",
+          style: TextStyle(color: primaryBlue, fontWeight: FontWeight.bold),
+        ),
         actions: [
           IconButton(
-            onPressed: () async {
-              await AuthPreferences.logout();
-              if (!mounted) return;
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const LoginPage()),
-              );
-            },
-            icon: const Icon(Icons.logout),
+            icon: Icon(Icons.account_circle, color: primaryBlue, size: 30),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ProfilePage()),
+            ),
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(24),
         child: Column(
           children: [
-            _buildInfoCard(),
-            const SizedBox(height: 30),
+            _buildHeaderCard(),
+            const SizedBox(height: 32),
             if (isLoading)
-              const Center(child: CircularProgressIndicator())
+              CircularProgressIndicator(color: primaryBlue)
             else ...[
-              _absentButton(
+              _buildAbsenceButton(
                 "CHECK IN",
                 Colors.green,
+                Icons.login,
                 !isAlreadyCheckIn,
                 () => _processAbsence(true),
               ),
-              const SizedBox(height: 15),
-              _absentButton(
+              const SizedBox(height: 16),
+              _buildAbsenceButton(
                 "CHECK OUT",
                 Colors.red,
+                Icons.logout,
                 isAlreadyCheckIn,
                 () => _processAbsence(false),
               ),
@@ -147,59 +152,82 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildInfoCard() {
+  Widget _buildHeaderCard() {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.blue.shade800,
-        borderRadius: BorderRadius.circular(20),
+        gradient: LinearGradient(
+          colors: [primaryBlue, const Color(0xFF003D70)],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: primaryBlue.withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("Token Aktif:", style: TextStyle(color: Colors.white70)),
-          SelectableText(
-            userToken ?? "-",
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 10,
-              fontFamily: 'monospace',
-            ),
-          ),
-          const Divider(color: Colors.white24),
           Text(
-            DateFormat('EEEE, dd MMMM yyyy').format(DateTime.now()),
-            style: const TextStyle(
-              color: Colors.white,
+            DateFormat('HH:mm').format(DateTime.now()),
+            style: TextStyle(
+              color: secondaryYellow,
+              fontSize: 42,
               fontWeight: FontWeight.bold,
             ),
+          ),
+          Text(
+            DateFormat('EEEE, dd MMMM yyyy').format(DateTime.now()),
+            style: const TextStyle(color: Colors.white70, fontSize: 16),
+          ),
+          const Divider(color: Colors.white24, height: 32),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.verified_user,
+                color: Colors.greenAccent,
+                size: 16,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isAlreadyCheckIn ? "Sudah Check In" : "Belum Absen",
+                style: const TextStyle(color: Colors.white),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _absentButton(
+  Widget _buildAbsenceButton(
     String label,
     Color color,
+    IconData icon,
     bool enabled,
     VoidCallback onTap,
   ) {
     return SizedBox(
       width: double.infinity,
-      height: 55,
-      child: ElevatedButton(
+      height: 60,
+      child: ElevatedButton.icon(
+        onPressed: enabled ? onTap : null,
+        icon: Icon(icon),
+        label: Text(
+          label,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
         style: ElevatedButton.styleFrom(
           backgroundColor: color,
           foregroundColor: Colors.white,
           disabledBackgroundColor: Colors.grey.shade300,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
           ),
         ),
-        onPressed: enabled ? onTap : null,
-        child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
       ),
     );
   }
