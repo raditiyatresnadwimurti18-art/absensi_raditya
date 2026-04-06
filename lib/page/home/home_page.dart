@@ -1,10 +1,12 @@
+import 'package:absensi_raditya/page/login/login.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:geocoding/geocoding.dart' as geocoding;
+import 'package:geocoding/geocoding.dart';
 import 'package:intl/intl.dart';
+
+// PERBAIKAN: Pastikan ejaan file controller benar (pakai double 't')
+import 'package:absensi_raditya/api/controllers/attendance_controller.dart';
 import 'package:absensi_raditya/api/preferences.dart';
-import 'package:absensi_raditya/api/controllers/atendance.dart';
-import 'package:absensi_raditya/page/login/login.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -16,88 +18,81 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   String? userToken;
   bool isLoading = false;
-  bool hasCheckedIn = false; // Status absensi
-  bool hasCheckedOut = false; // Status absensi checkout
+  bool isAlreadyCheckIn = false;
 
   @override
   void initState() {
     super.initState();
-    _loadInitialData();
+    _initData();
   }
 
-  void _loadInitialData() async {
+  void _initData() async {
     String? token = await AuthPreferences.getToken();
-    setState(() {
-      userToken = token;
-    });
+    setState(() => userToken = token);
   }
 
-  // Fungsi ambil lokasi Google
-  Future<Position> _determinePosition() async {
+  Future<Position> _getGeoLocation() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled)
-      return Future.error('GPS non-aktif. Harap nyalakan GPS.');
+    if (!serviceEnabled) return Future.error('GPS Anda mati, harap nyalakan.');
 
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied)
+      if (permission == LocationPermission.denied) {
         return Future.error('Izin lokasi ditolak.');
+      }
     }
     return await Geolocator.getCurrentPosition();
   }
 
-  // Fungsi Logika Absen
-  void _handleAttendance(bool isCheckIn) async {
+  void _processAbsence(bool isCheckIn) async {
     setState(() => isLoading = true);
     try {
-      Position position = await _determinePosition();
-      List<geocoding.Placemark> placemarks = await geocoding
-          .placemarkFromCoordinates(position.latitude, position.longitude);
-      geocoding.Placemark place = placemarks.first;
-      String address =
-          "${place.name ?? ''}, ${place.subLocality ?? ''}, ${place.locality ?? ''}";
+      Position pos = await _getGeoLocation();
 
-      String formattedDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
-      String formattedTime = DateFormat('HH:mm').format(DateTime.now());
+      // Mengambil alamat dari koordinat
+      List<Placemark> marks = await placemarkFromCoordinates(
+        pos.latitude,
+        pos.longitude,
+      );
+
+      Placemark place = marks[0];
+      String address =
+          "${place.street}, ${place.locality}, ${place.subAdministrativeArea}";
+
+      String date = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      String time = DateFormat('HH:mm').format(DateTime.now());
 
       if (isCheckIn) {
-        await AttendanceController.processCheckIn({
-          "attendance_date": formattedDate,
-          "check_in": formattedTime,
-          "check_in_lat": position.latitude,
-          "check_in_lng": position.longitude,
+        await AttendanceController.checkIn({
+          "attendance_date": date,
+          "check_in": time,
+          "check_in_lat": pos.latitude,
+          "check_in_lng": pos.longitude,
+          "check_in_location": "${pos.latitude},${pos.longitude}",
           "check_in_address": address,
           "status": "masuk",
         });
-        setState(() {
-          hasCheckedIn = true;
-          hasCheckedOut = false;
-        });
+        setState(() => isAlreadyCheckIn = true);
       } else {
-        await AttendanceController.processCheckOut({
-          "attendance_date": formattedDate,
-          "check_out": formattedTime,
-          "check_out_lat": position.latitude.toString(),
-          "check_out_lng": position.longitude.toString(),
-          "check_out_location": "${position.latitude}, ${position.longitude}",
+        await AttendanceController.checkOut({
+          "attendance_date": date,
+          "check_out": time,
+          "check_out_lat": pos.latitude,
+          "check_out_lng": pos.longitude,
+          "check_out_location": "${pos.latitude},${pos.longitude}",
           "check_out_address": address,
         });
-        setState(() {
-          hasCheckedOut = true;
-          hasCheckedIn = false;
-        });
+        setState(() => isAlreadyCheckIn = false);
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("${isCheckIn ? 'Check In' : 'Check Out'} Berhasil!"),
-        ),
+        SnackBar(content: Text("Berhasil ${isCheckIn ? 'Masuk' : 'Keluar'}!")),
       );
     } catch (e) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+      ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
     } finally {
       setState(() => isLoading = false);
     }
@@ -106,192 +101,106 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Presensi App'),
-        elevation: 0,
+        title: const Text("Absensi Raditya"),
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout),
             onPressed: () async {
               await AuthPreferences.logout();
-              if (mounted)
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (_) => const LoginPage()),
-                );
+              if (!mounted) return;
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const LoginPage()),
+              );
             },
+            icon: const Icon(Icons.logout),
           ),
         ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Card Info User & Token
-            _buildUserCard(),
-            const SizedBox(height: 25),
-
-            const Text(
-              "Menu Presensi",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 15),
-
-            // Card Tombol Absensi
-            _buildAttendanceSection(),
+            _buildInfoCard(),
+            const SizedBox(height: 30),
+            if (isLoading)
+              const Center(child: CircularProgressIndicator())
+            else ...[
+              _absentButton(
+                "CHECK IN",
+                Colors.green,
+                !isAlreadyCheckIn,
+                () => _processAbsence(true),
+              ),
+              const SizedBox(height: 15),
+              _absentButton(
+                "CHECK OUT",
+                Colors.red,
+                isAlreadyCheckIn,
+                () => _processAbsence(false),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _buildUserCard() {
+  Widget _buildInfoCard() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.blueAccent,
-        borderRadius: BorderRadius.circular(15),
+        color: Colors.blue.shade800,
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            "Token Aktif:",
-            style: TextStyle(color: Colors.white70, fontSize: 14),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            userToken ?? "Memuat...",
+          const Text("Token Aktif:", style: TextStyle(color: Colors.white70)),
+          SelectableText(
+            userToken ?? "-",
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 11,
+              fontSize: 10,
               fontFamily: 'monospace',
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
-          const Divider(color: Colors.white24, height: 25),
-          Row(
-            children: [
-              const CircleAvatar(
-                backgroundColor: Colors.white24,
-                child: Icon(Icons.person, color: Colors.white),
-              ),
-              const SizedBox(width: 15),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    "Selamat Datang,",
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                  Text(
-                    DateFormat('EEEE, dd MMM yyyy').format(DateTime.now()),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+          const Divider(color: Colors.white24),
+          Text(
+            DateFormat('EEEE, dd MMMM yyyy').format(DateTime.now()),
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildAttendanceSection() {
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _statusIndicator("Check In", hasCheckedIn),
-                const Icon(
-                  Icons.arrow_forward_ios,
-                  size: 15,
-                  color: Colors.grey,
-                ),
-                _statusIndicator(
-                  "Check Out",
-                  hasCheckedOut,
-                ), // Logika status check out
-              ],
-            ),
-            const SizedBox(height: 30),
-            if (isLoading)
-              const CircularProgressIndicator()
-            else ...[
-              ElevatedButton.icon(
-                onPressed: hasCheckedIn ? null : () => _handleAttendance(true),
-                icon: const Icon(Icons.login),
-                label: const Text("CHECK IN"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size.fromHeight(55),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 15),
-              ElevatedButton.icon(
-                onPressed: !hasCheckedIn
-                    ? null
-                    : () => _handleAttendance(false),
-                icon: const Icon(Icons.logout),
-                label: const Text("CHECK OUT"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.redAccent,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size.fromHeight(55),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              ),
-            ],
-            const SizedBox(height: 10),
-            const Text(
-              "*Pastikan GPS anda menyala sebelum absen",
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.grey,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _statusIndicator(String title, bool isDone) {
-    return Column(
-      children: [
-        Icon(
-          isDone ? Icons.check_circle : Icons.radio_button_off,
-          color: isDone ? Colors.green : Colors.grey,
-          size: 30,
-        ),
-        const SizedBox(height: 5),
-        Text(
-          title,
-          style: TextStyle(
-            color: isDone ? Colors.black : Colors.grey,
-            fontWeight: FontWeight.w600,
+  Widget _absentButton(
+    String label,
+    Color color,
+    bool enabled,
+    VoidCallback onTap,
+  ) {
+    return SizedBox(
+      width: double.infinity,
+      height: 55,
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: Colors.grey.shade300,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
           ),
         ),
-      ],
+        onPressed: enabled ? onTap : null,
+        child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+      ),
     );
   }
 }
