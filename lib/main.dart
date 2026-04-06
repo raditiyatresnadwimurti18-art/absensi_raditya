@@ -1,4 +1,4 @@
-import 'package:absensi_raditya/app.dart';
+import 'package:absensi_raditya/page/login/splash.dart';
 import 'package:flutter/material.dart';
 
 void main() {
@@ -11,6 +11,6 @@ class MyApp extends StatelessWidget {
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(home: AbsensiApp());
+    return MaterialApp(debugShowCheckedModeBanner: false, home: SplashPage());
   }
 }
