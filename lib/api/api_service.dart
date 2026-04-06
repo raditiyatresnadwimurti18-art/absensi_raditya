@@ -2,6 +2,15 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class ApiService {
+  // Ambil data absen hari ini
+  static Future<http.Response> getAttendanceToday(String token) async {
+    final url = Uri.parse("$baseUrl/absen/today");
+    return await http.get(
+      url,
+      headers: {"Authorization": "Bearer $token", "Accept": "application/json"},
+    );
+  }
+
   static const String baseUrl = "https://appabsensi.mobileprojp.com/api";
 
   // --------------------------------------------------------------------------

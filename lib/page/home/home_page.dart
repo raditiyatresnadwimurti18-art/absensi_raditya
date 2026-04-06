@@ -1,3 +1,4 @@
+import 'package:absensi_raditya/models/absen_inout.dart';
 import 'package:absensi_raditya/page/home/profile.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -17,6 +18,11 @@ class _HomePageState extends State<HomePage> {
   String? userToken;
   bool isLoading = false;
   bool isAlreadyCheckIn = false;
+  bool isLoadingAttendance = true;
+  bool isAlreadyAbsenToday = false;
+  String? absenStatusMessage;
+  // Simpan data absen hari ini jika perlu detail
+  AttendanceData? todayAttendance;
 
   // Tema sesuai Logo
   final Color primaryBlue = const Color(0xFF005DA9);
@@ -26,6 +32,43 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _initData();
+    _fetchTodayAttendance();
+  }
+
+  Future<void> _fetchTodayAttendance() async {
+    setState(() {
+      isLoadingAttendance = true;
+      absenStatusMessage = null;
+    });
+    try {
+      final response = await AttendanceController.getTodayAttendance();
+      todayAttendance = response.data;
+      // Cek status absen hari ini
+      if (todayAttendance != null && todayAttendance!.checkInTime != null) {
+        isAlreadyCheckIn = true;
+        // Jika sudah check out, tampilkan pesan sudah absen hari ini
+        if (todayAttendance!.checkOutTime != null &&
+            todayAttendance!.checkOutTime!.isNotEmpty) {
+          isAlreadyAbsenToday = true;
+          absenStatusMessage = "Anda sudah absen hari ini";
+        } else {
+          isAlreadyAbsenToday = false;
+          absenStatusMessage = null;
+        }
+      } else {
+        isAlreadyCheckIn = false;
+        isAlreadyAbsenToday = false;
+        absenStatusMessage = null;
+      }
+    } catch (e) {
+      absenStatusMessage = "Gagal mengambil status absen: ${e.toString()}";
+      isAlreadyCheckIn = false;
+      isAlreadyAbsenToday = false;
+    } finally {
+      setState(() {
+        isLoadingAttendance = false;
+      });
+    }
   }
 
   void _initData() async {
@@ -75,10 +118,8 @@ class _HomePageState extends State<HomePage> {
       if (isCheckIn) {
         data["status"] = "masuk";
         await AttendanceController.checkIn(data);
-        setState(() => isAlreadyCheckIn = true);
       } else {
         await AttendanceController.checkOut(data);
-        setState(() => isAlreadyCheckIn = false);
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -87,6 +128,8 @@ class _HomePageState extends State<HomePage> {
           backgroundColor: Colors.green,
         ),
       );
+      // Refresh status absen hari ini setelah absen
+      await _fetchTodayAttendance();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -127,7 +170,39 @@ class _HomePageState extends State<HomePage> {
           children: [
             _buildHeaderCard(),
             const SizedBox(height: 32),
-            if (isLoading)
+            if (isLoadingAttendance)
+              CircularProgressIndicator(color: primaryBlue)
+            else if (isAlreadyAbsenToday)
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 8,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.verified, color: Colors.green, size: 28),
+                    SizedBox(width: 12),
+                    Text(
+                      absenStatusMessage ?? "Anda sudah absen hari ini",
+                      style: TextStyle(
+                        color: Colors.green.shade700,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else if (isLoading)
               CircularProgressIndicator(color: primaryBlue)
             else ...[
               _buildAbsenceButton(
