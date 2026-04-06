@@ -6,6 +6,7 @@ import 'package:geocoding/geocoding.dart';
 import 'package:intl/intl.dart';
 import 'package:absensi_raditya/api/controllers/attendance_controller.dart';
 import 'package:absensi_raditya/api/preferences.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -15,6 +16,34 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  // Untuk Google Map
+  LatLng? _currentPosition;
+  final double _defaultLat = -6.200000;
+  final double _defaultLng = 106.816666;
+  final double _mapZoom = 16;
+  @override
+  void initState() {
+    super.initState();
+    _initData();
+    _fetchTodayAttendance();
+    _setCurrentLocation();
+    _fetchTodayAttendance();
+  }
+
+  Future<void> _setCurrentLocation() async {
+    try {
+      Position pos = await _getGeoLocation();
+      setState(() {
+        _currentPosition = LatLng(pos.latitude, pos.longitude);
+      });
+    } catch (e) {
+      // Jika gagal, gunakan default Jakarta
+      setState(() {
+        _currentPosition = LatLng(_defaultLat, _defaultLng);
+      });
+    }
+  }
+
   String? userToken;
   bool isLoading = false;
   bool isAlreadyCheckIn = false;
@@ -27,13 +56,6 @@ class _HomePageState extends State<HomePage> {
   // Tema sesuai Logo
   final Color primaryBlue = const Color(0xFF005DA9);
   final Color secondaryYellow = const Color(0xFFFFCC00);
-
-  @override
-  void initState() {
-    super.initState();
-    _initData();
-    _fetchTodayAttendance();
-  }
 
   Future<void> _fetchTodayAttendance() async {
     setState(() {
@@ -84,8 +106,9 @@ class _HomePageState extends State<HomePage> {
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied)
+      if (permission == LocationPermission.denied) {
         return Future.error('Izin lokasi ditolak.');
+      }
     }
     return await Geolocator.getCurrentPosition();
   }
@@ -169,7 +192,41 @@ class _HomePageState extends State<HomePage> {
         child: Column(
           children: [
             _buildHeaderCard(),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
+            // Google Map
+            Container(
+              height: 220,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white, width: 4),
+                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: _currentPosition == null
+                    ? Center(
+                        child: CircularProgressIndicator(color: primaryBlue),
+                      )
+                    : GoogleMap(
+                        initialCameraPosition: CameraPosition(
+                          target: _currentPosition!,
+                          zoom: _mapZoom,
+                        ),
+                        markers: {
+                          Marker(
+                            markerId: const MarkerId("current_pos"),
+                            position: _currentPosition!,
+                            infoWindow: const InfoWindow(title: "Lokasi Anda"),
+                          ),
+                        },
+                        myLocationEnabled: true,
+                        myLocationButtonEnabled: true,
+                        zoomControlsEnabled: false,
+                      ),
+              ),
+            ),
+            const SizedBox(height: 24),
             if (isLoadingAttendance)
               CircularProgressIndicator(color: primaryBlue)
             else if (isAlreadyAbsenToday)
