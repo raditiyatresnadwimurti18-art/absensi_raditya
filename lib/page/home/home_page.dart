@@ -218,6 +218,11 @@ class _HomePageState extends State<HomePage> {
         final userData = snapshot.hasData
             ? User.fromJson(snapshot.data!)
             : null;
+
+        // Ambil data jam dari todayAttendance yang sudah di-fetch di initState
+        String checkInTime = todayAttendance?.checkInTime ?? "--:--";
+        String checkOutTime = todayAttendance?.checkOutTime ?? "--:--";
+
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.all(24),
@@ -236,6 +241,7 @@ class _HomePageState extends State<HomePage> {
           ),
           child: Column(
             children: [
+              // Row Profil (Tetap sama seperti sebelumnya)
               Row(
                 children: [
                   CircleAvatar(
@@ -303,27 +309,21 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
               const Divider(color: Colors.white24, height: 32),
+
+              // --- BAGIAN RIWAYAT ABSEN JAM (PERUBAHAN DI SINI) ---
               Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  Icon(
-                    isAlreadyCheckIn
-                        ? Icons.check_circle
-                        : Icons.radio_button_unchecked,
-                    color: isAlreadyCheckIn
-                        ? Colors.greenAccent
-                        : Colors.white70,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    isAlreadyCheckIn
-                        ? "Sudah Check In"
-                        : "Belum Absen Hari Ini",
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w500,
-                    ),
+                  _buildTimeInfo("Check In", checkInTime, Icons.login_rounded),
+                  Container(
+                    width: 1,
+                    height: 30,
+                    color: Colors.white24,
+                  ), // Garis pembatas vertikal
+                  _buildTimeInfo(
+                    "Check Out",
+                    checkOutTime,
+                    Icons.logout_rounded,
                   ),
                 ],
               ),
@@ -331,6 +331,33 @@ class _HomePageState extends State<HomePage> {
           ),
         );
       },
+    );
+  }
+
+  // Helper Widget untuk menampilkan jam agar rapi
+  Widget _buildTimeInfo(String label, String time, IconData icon) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Icon(icon, color: secondaryYellow, size: 16),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          time,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
     );
   }
 
