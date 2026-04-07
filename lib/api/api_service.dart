@@ -94,4 +94,43 @@ class ApiService {
   }) async {
     return await postAttendance("check-out", token, data);
   }
+
+  // Update Nama Profil (PUT)
+  static Future<http.Response> updateProfile({
+    required String token,
+    required String name,
+  }) async {
+    final url = Uri.parse("$baseUrl/profile");
+    return await http.put(
+      // Menggunakan PUT
+      url,
+      headers: {
+        "Authorization": "Bearer $token",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: jsonEncode({"name": name}),
+    );
+  }
+
+  // Update Foto Profil (PUT dengan Method Spoofing)
+  // Update Foto Profil menggunakan Base64 (JSON PUT)
+  static Future<http.Response> updatePhotoBase64({
+    required String token,
+    required String base64Image,
+  }) async {
+    final url = Uri.parse("$baseUrl/profile/photo");
+    return await http.put(
+      url,
+      headers: {
+        "Authorization": "Bearer $token",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: jsonEncode({
+        "profile_photo":
+            "data:image/png;base64,$base64Image", // Format JSON kamu
+      }),
+    );
+  }
 }

@@ -1,4 +1,5 @@
 import 'package:absensi_raditya/models/absen_inout.dart';
+import 'package:absensi_raditya/models/usermodel.dart'; // Tambahkan import model User
 import 'package:absensi_raditya/page/home/profile.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -16,33 +17,10 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  // Untuk Google Map
   LatLng? _currentPosition;
   final double _defaultLat = -6.200000;
   final double _defaultLng = 106.816666;
   final double _mapZoom = 16;
-  @override
-  void initState() {
-    super.initState();
-    _initData();
-    _fetchTodayAttendance();
-    _setCurrentLocation();
-    _fetchTodayAttendance();
-  }
-
-  Future<void> _setCurrentLocation() async {
-    try {
-      Position pos = await _getGeoLocation();
-      setState(() {
-        _currentPosition = LatLng(pos.latitude, pos.longitude);
-      });
-    } catch (e) {
-      // Jika gagal, gunakan default Jakarta
-      setState(() {
-        _currentPosition = LatLng(_defaultLat, _defaultLng);
-      });
-    }
-  }
 
   String? userToken;
   bool isLoading = false;
@@ -50,12 +28,36 @@ class _HomePageState extends State<HomePage> {
   bool isLoadingAttendance = true;
   bool isAlreadyAbsenToday = false;
   String? absenStatusMessage;
-  // Simpan data absen hari ini jika perlu detail
   AttendanceData? todayAttendance;
 
-  // Tema sesuai Logo
   final Color primaryBlue = const Color(0xFF005DA9);
   final Color secondaryYellow = const Color(0xFFFFCC00);
+
+  @override
+  void initState() {
+    super.initState();
+    _initData();
+    _fetchTodayAttendance();
+    _setCurrentLocation();
+  }
+
+  // --- LOGIKA DATA & LOKASI ---
+  Future<void> _setCurrentLocation() async {
+    try {
+      Position pos = await _getGeoLocation();
+      if (mounted) {
+        setState(() {
+          _currentPosition = LatLng(pos.latitude, pos.longitude);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _currentPosition = LatLng(_defaultLat, _defaultLng);
+        });
+      }
+    }
+  }
 
   Future<void> _fetchTodayAttendance() async {
     setState(() {
@@ -65,31 +67,21 @@ class _HomePageState extends State<HomePage> {
     try {
       final response = await AttendanceController.getTodayAttendance();
       todayAttendance = response.data;
-      // Cek status absen hari ini
       if (todayAttendance != null && todayAttendance!.checkInTime != null) {
         isAlreadyCheckIn = true;
-        // Jika sudah check out, tampilkan pesan sudah absen hari ini
         if (todayAttendance!.checkOutTime != null &&
             todayAttendance!.checkOutTime!.isNotEmpty) {
           isAlreadyAbsenToday = true;
           absenStatusMessage = "Anda sudah absen hari ini";
-        } else {
-          isAlreadyAbsenToday = false;
-          absenStatusMessage = null;
         }
       } else {
         isAlreadyCheckIn = false;
         isAlreadyAbsenToday = false;
-        absenStatusMessage = null;
       }
     } catch (e) {
-      absenStatusMessage = "Gagal mengambil status absen: ${e.toString()}";
-      isAlreadyCheckIn = false;
-      isAlreadyAbsenToday = false;
+      absenStatusMessage = "Gagal mengambil status";
     } finally {
-      setState(() {
-        isLoadingAttendance = false;
-      });
+      if (mounted) setState(() => isLoadingAttendance = false);
     }
   }
 
@@ -98,22 +90,20 @@ class _HomePageState extends State<HomePage> {
     setState(() => userToken = token);
   }
 
-  // --- FUNGSI YANG ERROR TADI (PASTIKAN ADA DI SINI) ---
   Future<Position> _getGeoLocation() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) return Future.error('GPS Anda mati, harap nyalakan.');
-
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
+      if (permission == LocationPermission.denied)
         return Future.error('Izin lokasi ditolak.');
-      }
     }
     return await Geolocator.getCurrentPosition();
   }
 
   void _processAbsence(bool isCheckIn) async {
+    final messenger = ScaffoldMessenger.of(context);
     setState(() => isLoading = true);
     try {
       Position pos = await _getGeoLocation();
@@ -125,12 +115,11 @@ class _HomePageState extends State<HomePage> {
       String address =
           "${place.street}, ${place.locality}, ${place.subAdministrativeArea}";
 
-      String date = DateFormat('yyyy-MM-dd').format(DateTime.now());
-      String time = DateFormat('HH:mm').format(DateTime.now());
-
       Map<String, dynamic> data = {
-        "attendance_date": date,
-        isCheckIn ? "check_in" : "check_out": time,
+        "attendance_date": DateFormat('yyyy-MM-dd').format(DateTime.now()),
+        isCheckIn ? "check_in" : "check_out": DateFormat(
+          'HH:mm',
+        ).format(DateTime.now()),
         "${isCheckIn ? 'check_in' : 'check_out'}_lat": pos.latitude,
         "${isCheckIn ? 'check_in' : 'check_out'}_lng": pos.longitude,
         "${isCheckIn ? 'check_in' : 'check_out'}_location":
@@ -145,23 +134,22 @@ class _HomePageState extends State<HomePage> {
         await AttendanceController.checkOut(data);
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text("Berhasil ${isCheckIn ? 'Check In' : 'Check Out'}!"),
           backgroundColor: Colors.green,
         ),
       );
-      // Refresh status absen hari ini setelah absen
       await _fetchTodayAttendance();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text("Error: ${e.toString()}"),
           backgroundColor: Colors.red,
         ),
       );
     } finally {
-      setState(() => isLoading = false);
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
@@ -177,14 +165,35 @@ class _HomePageState extends State<HomePage> {
           style: TextStyle(color: primaryBlue, fontWeight: FontWeight.bold),
         ),
         actions: [
-          IconButton(
-            icon: Icon(Icons.account_circle, color: primaryBlue, size: 30),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const ProfilePage()),
-            ),
+          // --- FOTO PROFIL DI APPBAR ---
+          FutureBuilder<Map<String, dynamic>?>(
+            future: AuthPreferences.getUserData(),
+            builder: (context, snapshot) {
+              String? photoUrl;
+              if (snapshot.hasData && snapshot.data != null) {
+                photoUrl = snapshot.data!['profile_photo'];
+              }
+              return GestureDetector(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ProfilePage()),
+                ).then((_) => setState(() {})),
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: CircleAvatar(
+                    radius: 18,
+                    backgroundColor: primaryBlue.withOpacity(0.1),
+                    backgroundImage: (photoUrl != null && photoUrl.isNotEmpty)
+                        ? NetworkImage(photoUrl)
+                        : null,
+                    child: (photoUrl == null || photoUrl.isEmpty)
+                        ? Icon(Icons.person, color: primaryBlue, size: 20)
+                        : null,
+                  ),
+                ),
+              );
+            },
           ),
-          const SizedBox(width: 8),
         ],
       ),
       body: SingleChildScrollView(
@@ -193,91 +202,9 @@ class _HomePageState extends State<HomePage> {
           children: [
             _buildHeaderCard(),
             const SizedBox(height: 24),
-            // Google Map
-            Container(
-              height: 220,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white, width: 4),
-                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: _currentPosition == null
-                    ? Center(
-                        child: CircularProgressIndicator(color: primaryBlue),
-                      )
-                    : GoogleMap(
-                        initialCameraPosition: CameraPosition(
-                          target: _currentPosition!,
-                          zoom: _mapZoom,
-                        ),
-                        markers: {
-                          Marker(
-                            markerId: const MarkerId("current_pos"),
-                            position: _currentPosition!,
-                            infoWindow: const InfoWindow(title: "Lokasi Anda"),
-                          ),
-                        },
-                        myLocationEnabled: true,
-                        myLocationButtonEnabled: true,
-                        zoomControlsEnabled: false,
-                      ),
-              ),
-            ),
+            _buildMapSection(),
             const SizedBox(height: 24),
-            if (isLoadingAttendance)
-              CircularProgressIndicator(color: primaryBlue)
-            else if (isAlreadyAbsenToday)
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black12,
-                      blurRadius: 8,
-                      offset: Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.verified, color: Colors.green, size: 28),
-                    SizedBox(width: 12),
-                    Text(
-                      absenStatusMessage ?? "Anda sudah absen hari ini",
-                      style: TextStyle(
-                        color: Colors.green.shade700,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            else if (isLoading)
-              CircularProgressIndicator(color: primaryBlue)
-            else ...[
-              _buildAbsenceButton(
-                "CHECK IN",
-                Colors.green,
-                Icons.login,
-                !isAlreadyCheckIn,
-                () => _processAbsence(true),
-              ),
-              const SizedBox(height: 16),
-              _buildAbsenceButton(
-                "CHECK OUT",
-                Colors.red,
-                Icons.logout,
-                isAlreadyCheckIn,
-                () => _processAbsence(false),
-              ),
-            ],
+            _buildAttendanceStatus(),
           ],
         ),
       ),
@@ -285,53 +212,206 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildHeaderCard() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [primaryBlue, const Color(0xFF003D70)],
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: primaryBlue.withOpacity(0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Text(
-            DateFormat('HH:mm').format(DateTime.now()),
-            style: TextStyle(
-              color: secondaryYellow,
-              fontSize: 42,
-              fontWeight: FontWeight.bold,
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: AuthPreferences.getUserData(),
+      builder: (context, snapshot) {
+        final userData = snapshot.hasData
+            ? User.fromJson(snapshot.data!)
+            : null;
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [primaryBlue, const Color(0xFF003D70)],
             ),
-          ),
-          Text(
-            DateFormat('EEEE, dd MMMM yyyy').format(DateTime.now()),
-            style: const TextStyle(color: Colors.white70, fontSize: 16),
-          ),
-          const Divider(color: Colors.white24, height: 32),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.verified_user,
-                color: Colors.greenAccent,
-                size: 16,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                isAlreadyCheckIn ? "Sudah Check In" : "Belum Absen",
-                style: const TextStyle(color: Colors.white),
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: primaryBlue.withOpacity(0.3),
+                blurRadius: 15,
+                offset: const Offset(0, 8),
               ),
             ],
           ),
-        ],
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 30,
+                    backgroundColor: Colors.white24,
+                    backgroundImage:
+                        (userData?.profilePhoto != null &&
+                            userData!.profilePhoto!.isNotEmpty)
+                        ? NetworkImage(userData.profilePhoto!)
+                        : null,
+                    child:
+                        (userData?.profilePhoto == null ||
+                            userData!.profilePhoto!.isEmpty)
+                        ? const Icon(
+                            Icons.person,
+                            color: Colors.white,
+                            size: 30,
+                          )
+                        : null,
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Halo,",
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.7),
+                            fontSize: 14,
+                          ),
+                        ),
+                        Text(
+                          userData?.name ?? "Pengguna",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        DateFormat('HH:mm').format(DateTime.now()),
+                        style: TextStyle(
+                          color: secondaryYellow,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        DateFormat('dd MMM').format(DateTime.now()),
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const Divider(color: Colors.white24, height: 32),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    isAlreadyCheckIn
+                        ? Icons.check_circle
+                        : Icons.radio_button_unchecked,
+                    color: isAlreadyCheckIn
+                        ? Colors.greenAccent
+                        : Colors.white70,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    isAlreadyCheckIn
+                        ? "Sudah Check In"
+                        : "Belum Absen Hari Ini",
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMapSection() {
+    return Container(
+      height: 200,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white, width: 4),
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
       ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: _currentPosition == null
+            ? Center(child: CircularProgressIndicator(color: primaryBlue))
+            : GoogleMap(
+                initialCameraPosition: CameraPosition(
+                  target: _currentPosition!,
+                  zoom: _mapZoom,
+                ),
+                markers: {
+                  Marker(
+                    markerId: const MarkerId("current_pos"),
+                    position: _currentPosition!,
+                  ),
+                },
+                myLocationEnabled: true,
+                zoomControlsEnabled: false,
+              ),
+      ),
+    );
+  }
+
+  Widget _buildAttendanceStatus() {
+    if (isLoadingAttendance)
+      return CircularProgressIndicator(color: primaryBlue);
+    if (isAlreadyAbsenToday) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8)],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.verified, color: Colors.green, size: 28),
+            const SizedBox(width: 12),
+            Text(
+              absenStatusMessage ?? "Absensi Selesai",
+              style: TextStyle(
+                color: Colors.green.shade700,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    if (isLoading) return CircularProgressIndicator(color: primaryBlue);
+    return Column(
+      children: [
+        _buildAbsenceButton(
+          "CHECK IN",
+          Colors.green,
+          Icons.login,
+          !isAlreadyCheckIn,
+          () => _processAbsence(true),
+        ),
+        const SizedBox(height: 16),
+        _buildAbsenceButton(
+          "CHECK OUT",
+          Colors.red,
+          Icons.logout,
+          isAlreadyCheckIn,
+          () => _processAbsence(false),
+        ),
+      ],
     );
   }
 
@@ -344,7 +424,7 @@ class _HomePageState extends State<HomePage> {
   ) {
     return SizedBox(
       width: double.infinity,
-      height: 60,
+      height: 55,
       child: ElevatedButton.icon(
         onPressed: enabled ? onTap : null,
         icon: Icon(icon),
