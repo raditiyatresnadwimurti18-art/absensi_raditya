@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:absensi_raditya/api/api_service.dart';
 import 'package:absensi_raditya/api/preferences.dart';
 import 'package:absensi_raditya/models/absen_inout.dart';
+import 'package:absensi_raditya/models/riwayat_absen.dart';
 import 'package:intl/intl.dart';
 
 class AttendanceController {
@@ -10,14 +13,9 @@ class AttendanceController {
 
     final response = await ApiService.get("absen/today", token);
     final result = attendanceResponseFromJson(response.body);
-
-    // FIX: Jika status 200, kembalikan data.
-    // Jika tidak (misal 404 karena belum ada absen), jangan lempar exception dulu,
-    // tapi kembalikan object result agar UI bisa membaca bahwa data masih null.
     if (response.statusCode == 200) {
       return result;
     } else {
-      // Mengembalikan result meskipun isinya null/pesan "Belum ada data"
       return result;
     }
   }
@@ -56,7 +54,7 @@ class AttendanceController {
     };
 
     String? token = await AuthPreferences.getToken();
-    final response = await ApiService.post("absen/izin", token!, body);
+    final response = await ApiService.post("izin", token!, body);
     final result = attendanceResponseFromJson(response.body);
 
     if (response.statusCode == 200 || response.statusCode == 201) {
@@ -72,5 +70,30 @@ class AttendanceController {
     final result = attendanceResponseFromJson(response.body);
     if (response.statusCode == 200 || response.statusCode == 201) return result;
     throw Exception(result.message ?? "Gagal Check-out.");
+  }
+
+  static Future<HistoryResponse> getHistory() async {
+    try {
+      // 1. Ambil token saja
+      String? token = await AuthPreferences.getToken();
+
+      if (token == null) {
+        throw Exception("Sesi berakhir, silakan login kembali.");
+      }
+
+      // 2. Panggil API Service menggunakan method GET (karena hanya mengambil data)
+      // Jika backend kamu mewajibkan POST meskipun tanpa body email/pass,
+      // ganti ApiService.get menjadi ApiService.post(endpoint, token, {})
+      final response = await ApiService.get("absen/history", token);
+
+      if (response.statusCode == 200) {
+        return historyResponseFromJson(response.body);
+      } else {
+        final errorResult = jsonDecode(response.body);
+        throw Exception(errorResult['message'] ?? "Gagal mengambil riwayat");
+      }
+    } catch (e) {
+      rethrow;
+    }
   }
 }

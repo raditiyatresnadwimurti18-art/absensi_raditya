@@ -1,7 +1,7 @@
 import 'package:absensi_raditya/api/controllers/auth.dart';
-import 'package:absensi_raditya/api/controllers/profile_controller.dart'; // Import ini penting
+import 'package:absensi_raditya/api/controllers/profile_controller.dart';
+import 'package:absensi_raditya/page/navigator_page/main_navigation.dart';
 import 'package:flutter/material.dart';
-import 'package:absensi_raditya/page/home/home_page.dart';
 import 'package:absensi_raditya/page/login/register.dart';
 
 class LoginPage extends StatefulWidget {
@@ -21,7 +21,6 @@ class _LoginPageState extends State<LoginPage> {
   final Color secondaryYellow = const Color(0xFFFFCC00);
 
   Future<void> login() async {
-    // Validasi input sederhana
     if (email.text.isEmpty || password.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -35,28 +34,22 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => isLoading = true);
 
     try {
-      // 1. Jalankan proses Login untuk mendapatkan Token
       final result = await AuthController.login(
         email: email.text.trim(),
         password: password.text,
       );
 
       if (result != null && mounted) {
-        // 2. SINKRONISASI DATA PROFIL (Solusi agar profil tidak kosong)
-        // Setelah login sukses, langsung tarik data profil lengkap dari server
-        // dan simpan ke SharedPreferences melalui controller.
         try {
           await ProfileController.getProfile();
         } catch (profileError) {
-          // Jika gagal ambil profil, log saja agar tidak menghentikan proses masuk
           debugPrint("Gagal sinkronisasi data profil: $profileError");
         }
 
-        // 3. Pindah ke Halaman Utama
         if (mounted) {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (_) => const HomePage()),
+            MaterialPageRoute(builder: (_) => const MainNavigation()),
           );
         }
       }

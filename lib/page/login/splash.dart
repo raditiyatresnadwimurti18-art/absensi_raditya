@@ -1,7 +1,7 @@
 // lib/view/splash_page.dart
+import 'package:absensi_raditya/page/navigator_page/main_navigation.dart';
 import 'package:flutter/material.dart';
 import 'package:absensi_raditya/api/preferences.dart';
-import 'package:absensi_raditya/page/home/home_page.dart';
 import 'package:absensi_raditya/page/login/login.dart';
 
 class SplashPage extends StatefulWidget {
@@ -26,7 +26,7 @@ class _SplashPageState extends State<SplashPage> {
     if (isLogin) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const HomePage()),
+        MaterialPageRoute(builder: (_) => const MainNavigation()),
       );
     } else {
       Navigator.pushReplacement(
