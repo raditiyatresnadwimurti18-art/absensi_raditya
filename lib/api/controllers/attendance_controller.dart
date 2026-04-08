@@ -96,4 +96,30 @@ class AttendanceController {
       rethrow;
     }
   }
+
+  static Future<void> deleteAttendance(
+    int id,
+    String name,
+    String email,
+    String password,
+  ) async {
+    String? token = await AuthPreferences.getToken();
+    if (token == null) throw Exception("Sesi berakhir.");
+
+    // Body sesuai gambar Postman yang kamu berikan
+    Map<String, dynamic> body = {
+      "name": name,
+      "email": email,
+      "password": password,
+    };
+
+    // Endpoint: /api/absen/{id}
+    final response = await ApiService.delete("absen/$id", token, body);
+
+    final result = jsonDecode(response.body);
+
+    if (response.statusCode != 200) {
+      throw Exception(result['message'] ?? "Gagal menghapus data dari server.");
+    }
+  }
 }

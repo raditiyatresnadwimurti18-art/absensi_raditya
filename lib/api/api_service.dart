@@ -137,4 +137,20 @@ class ApiService {
       "Accept": "application/json",
     };
   }
+
+  static Future<http.Response> delete(
+    String endpoint,
+    String token,
+    Map<String, dynamic> body,
+  ) async {
+    final url = Uri.parse("$baseUrl/$endpoint");
+    return await http.delete(
+      url,
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+      body: jsonEncode(body),
+    );
+  }
 }

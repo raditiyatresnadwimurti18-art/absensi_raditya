@@ -203,6 +203,52 @@ class _HomePageState extends State<HomePage>
     );
   }
 
+  void _processDeleteAbsence() async {
+    // 1. Ambil data user dari preferences
+    final userData = await AuthPreferences.getUserData();
+
+    // 2. Ambil ID dari todayAttendance yang didapat dari getTodayAttendance()
+    final int? attendanceId = todayAttendance?.id;
+
+    if (attendanceId == null) {
+      _showSnackBar(
+        "ID Absen tidak ditemukan. Coba refresh halaman.",
+        Colors.orange,
+      );
+      return;
+    }
+
+    setState(() => isLoading = true);
+
+    try {
+      // 3. Eksekusi hapus langsung ke API
+      await AttendanceController.deleteAttendance(
+        attendanceId,
+        userData?['name'] ?? "User", // Ambil dari prefs
+        userData?['email'] ?? "", // Ambil dari prefs
+        "!1Aa1111!", // Sesuaikan password ini
+      );
+
+      // 4. Jika sukses, tampilkan pesan dan paksa refresh UI
+      _showSnackBar("Data absen berhasil dihapus!", Colors.blueGrey);
+
+      // Reset data lokal sebelum fetch ulang agar tombol kembali ke 'Check In'
+      setState(() {
+        todayAttendance = null;
+      });
+
+      _fetchTodayAttendance();
+    } catch (e) {
+      debugPrint("Error Delete: $e");
+      _showSnackBar(
+        "Gagal: ${e.toString().replaceAll("Exception: ", "")}",
+        Colors.red,
+      );
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
+
   // --- UI SECTION DENGAN SENTUHAN LOGO ---
 
   @override
@@ -461,14 +507,26 @@ class _HomePageState extends State<HomePage>
     bool hasCheckOut = todayAttendance?.checkOutTime != null;
     bool isIzin = todayAttendance?.status?.toLowerCase() == "izin";
 
-    if (isIzin)
-      return _buildStatusTile("Anda sedang Izin/Sakit", Colors.orange);
-    if (hasCheckOut)
-      return _buildStatusTile("Presensi hari ini selesai", Colors.green);
-
     return Column(
       children: [
-        if (!hasCheckIn) ...[
+        if (isIzin) ...[
+          _buildStatusTile("Anda sedang Izin/Sakit", Colors.orange),
+          const SizedBox(height: 12),
+          _buildDeleteButton(), // Tombol hapus jika ingin membatalkan izin
+        ] else if (hasCheckOut) ...[
+          _buildStatusTile("Presensi hari ini selesai", Colors.green),
+          const SizedBox(height: 12),
+          _buildDeleteButton(), // Tombol hapus jika ingin mengulang absen
+        ] else if (hasCheckIn) ...[
+          _buildMainActionButton(
+            "CHECK OUT PULANG",
+            const Color(0xFFE53935),
+            Icons.power_settings_new_rounded,
+            () => _processAbsence(false),
+          ),
+          const SizedBox(height: 12),
+          _buildDeleteButton(), // Tombol hapus muncul di bawah tombol check-out
+        ] else ...[
           _buildMainActionButton(
             "CHECK IN MASUK",
             primaryBlue,
@@ -477,15 +535,20 @@ class _HomePageState extends State<HomePage>
           ),
           const SizedBox(height: 12),
           _buildSecondaryActionButton("Izin / Sakit", () => _processIzin()),
-        ] else ...[
-          _buildMainActionButton(
-            "CHECK OUT PULANG",
-            const Color(0xFFE53935),
-            Icons.power_settings_new_rounded,
-            () => _processAbsence(false),
-          ),
         ],
       ],
+    );
+  }
+
+  // Widget tombol hapus dengan style yang konsisten
+  Widget _buildDeleteButton() {
+    return TextButton.icon(
+      onPressed: isLoading ? null : _processDeleteAbsence,
+      icon: const Icon(Icons.delete_forever, color: Colors.redAccent),
+      label: const Text(
+        "Hapus/Reset Absen Hari Ini",
+        style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
+      ),
     );
   }
 
