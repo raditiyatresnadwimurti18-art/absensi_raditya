@@ -11,61 +11,78 @@ class HistoryPage extends StatefulWidget {
 }
 
 class _HistoryPageState extends State<HistoryPage> {
-  final Color primaryBlue = const Color(0xFF005DA9);
+  // Konsistensi Warna sesuai Logo
+  final Color primaryBlue = const Color(0xFF0074B7);
+  final Color primaryYellow = const Color(0xFFFFD700);
+  final Color bgColor = const Color(0xFFF1F5F9);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: Colors.white,
+      backgroundColor: bgColor,
+      body: Stack(
+        children: [
+          // Background Header Gradasi
+          _buildHeaderBackground(),
 
-        title: Text(
-          "Riwayat Absensi",
-          style: TextStyle(color: primaryBlue, fontWeight: FontWeight.bold),
-        ),
-      ),
-      body: FutureBuilder<HistoryResponse>(
-        future: AttendanceController.getHistory(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+          SafeArea(
+            child: Column(
+              children: [
+                Expanded(
+                  child: FutureBuilder<HistoryResponse>(
+                    future: AttendanceController.getHistory(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return Center(
+                          child: CircularProgressIndicator(color: primaryBlue),
+                        );
+                      }
 
-          if (snapshot.hasError) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, size: 60, color: Colors.red),
-                  const SizedBox(height: 16),
-                  Text("Error: ${snapshot.error}"),
-                  const SizedBox(height: 8),
-                  ElevatedButton(
-                    onPressed: () => setState(() {}),
-                    child: const Text("Coba Lagi"),
+                      if (snapshot.hasError) {
+                        return _buildErrorState(snapshot.error.toString());
+                      }
+
+                      final listHistory = snapshot.data?.data ?? [];
+
+                      if (listHistory.isEmpty) {
+                        return _buildEmptyState();
+                      }
+
+                      return RefreshIndicator(
+                        onRefresh: () async => setState(() {}),
+                        child: ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+                          itemCount: listHistory.length,
+                          itemBuilder: (context, index) {
+                            final item = listHistory[index];
+                            return _buildHistoryCard(item);
+                          },
+                        ),
+                      );
+                    },
                   ),
-                ],
-              ),
-            );
-          }
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-          final listHistory = snapshot.data?.data ?? [];
-
-          if (listHistory.isEmpty) {
-            return const Center(child: Text("Belum ada riwayat absensi."));
-          }
-
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: listHistory.length,
-            itemBuilder: (context, index) {
-              final item = listHistory[index];
-              return _buildHistoryCard(item);
-            },
-          );
-        },
+  Widget _buildHeaderBackground() {
+    return Container(
+      height: 180,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [primaryBlue, primaryBlue.withOpacity(0.8)],
+        ),
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(32),
+          bottomRight: Radius.circular(32),
+        ),
       ),
     );
   }
@@ -76,126 +93,214 @@ class _HistoryPageState extends State<HistoryPage> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: IntrinsicHeight(
+          child: Row(
             children: [
-              Text(
-                _formatDate(item.attendanceDate),
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: statusColor.withOpacity(0.3)),
-                ),
-                child: Text(
-                  item.status?.toUpperCase() ?? "-",
-                  style: TextStyle(
-                    color: statusColor,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
+              // Garis Status di Samping (Indikator Visual)
+              Container(width: 6, color: statusColor),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            _formatDate(item.attendanceDate),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          _buildStatusBadge(
+                            item.status?.toUpperCase() ?? "-",
+                            statusColor,
+                          ),
+                        ],
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Divider(height: 1),
+                      ),
+                      Row(
+                        children: [
+                          _buildTimeInfo(
+                            "MASUK",
+                            item.checkInTime ?? "--:--",
+                            Icons.login_rounded,
+                            Colors.green,
+                          ),
+                          const Spacer(),
+                          _buildTimeInfo(
+                            "PULANG",
+                            item.checkOutTime ?? "--:--",
+                            Icons.logout_rounded,
+                            Colors.redAccent,
+                          ),
+                          const Spacer(),
+                          _buildTimeInfo(
+                            "DETAIL",
+                            isIzin ? "IZIN" : "HADIR",
+                            Icons.info_outline_rounded,
+                            primaryBlue,
+                          ),
+                        ],
+                      ),
+                      if (isIzin && item.alasanIzin != null) ...[
+                        const SizedBox(height: 16),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: Colors.orange.withOpacity(0.1),
+                            ),
+                          ),
+                          child: Text(
+                            "Ket: ${item.alasanIzin}",
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.orange[800],
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ),
             ],
           ),
-          const Divider(height: 24),
-          Row(
-            children: [
-              _buildTimeColumn(
-                "Masuk",
-                item.checkInTime ?? "--:--",
-                Icons.login,
-                Colors.green,
-              ),
-              const Spacer(),
-              _buildTimeColumn(
-                "Pulang",
-                item.checkOutTime ?? "--:--",
-                Icons.logout,
-                Colors.red,
-              ),
-              const Spacer(),
-              _buildTimeColumn(
-                "Detail",
-                isIzin ? "IZIN" : "HADIR",
-                Icons.info_outline,
-                primaryBlue,
-              ),
-            ],
-          ),
-          if (isIzin && item.alasanIzin != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey[50]!,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                "Ket: ${item.alasanIzin}",
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey[700],
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildTimeColumn(
-    String label,
-    String time,
-    IconData icon,
-    Color color,
-  ) {
+  Widget _buildStatusBadge(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimeInfo(String label, String time, IconData icon, Color color) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Icon(icon, size: 14, color: color),
+            Icon(icon, size: 12, color: color),
             const SizedBox(width: 4),
             Text(
               label,
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+              style: const TextStyle(
+                fontSize: 10,
+                color: Colors.grey,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ],
         ),
         const SizedBox(height: 4),
         Text(
           time,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+          style: const TextStyle(
+            fontWeight: FontWeight.w900,
+            fontSize: 14,
+            color: Colors.black87,
+          ),
         ),
       ],
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.history_toggle_off_rounded,
+            size: 80,
+            color: Colors.grey[300],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            "Belum ada riwayat",
+            style: TextStyle(
+              color: Colors.grey[500],
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState(String error) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.cloud_off_rounded,
+              size: 60,
+              color: Colors.redAccent,
+            ),
+            const SizedBox(height: 16),
+            Text("Terjadi kesalahan: $error", textAlign: TextAlign.center),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryBlue,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: () => setState(() {}),
+              child: const Text(
+                "Coba Lagi",
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -203,6 +308,7 @@ class _HistoryPageState extends State<HistoryPage> {
     if (dateStr == null) return "-";
     try {
       DateTime dt = DateTime.parse(dateStr);
+      // Format Indonesia (Senin, 08 Apr 2026)
       return DateFormat('EEEE, dd MMM yyyy').format(dt);
     } catch (e) {
       return dateStr;

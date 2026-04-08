@@ -27,9 +27,12 @@ class _HomePageState extends State<HomePage>
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
 
+  // WARNA DISESUAIKAN DENGAN LOGO
   final Color primaryBlue = const Color(0xFF0074B7);
-  final Color lightBg = const Color(0xFFF1F5F9);
+  final Color primaryYellow = const Color(0xFFFFD700);
+  final Color lightBg = const Color(0xFFF8FAFC);
 
   @override
   void initState() {
@@ -39,12 +42,22 @@ class _HomePageState extends State<HomePage>
 
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1000),
+      duration: const Duration(milliseconds: 1200),
     );
+
     _fadeAnimation = CurvedAnimation(
       parent: _animationController,
-      curve: Curves.easeIn,
+      curve: Curves.easeOut,
     );
+
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0, 0.1), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: Curves.elasticOut,
+          ),
+        );
+
     _animationController.forward();
   }
 
@@ -54,8 +67,7 @@ class _HomePageState extends State<HomePage>
     super.dispose();
   }
 
-  // --- LOGIKA BACKEND YANG SUDAH DIPERBAIKI ---
-
+  // --- LOGIKA BACKEND TETAP SAMA ---
   Future<void> _setCurrentLocation() async {
     try {
       Position pos = await _getGeoLocation();
@@ -94,7 +106,6 @@ class _HomePageState extends State<HomePage>
     return await Geolocator.getCurrentPosition();
   }
 
-  // FUNGSI UTAMA: Sudah diperbaiki sesuai spesifikasi API terbaru
   void _processAbsence(bool isCheckIn) async {
     setState(() => isLoading = true);
     try {
@@ -104,15 +115,13 @@ class _HomePageState extends State<HomePage>
         pos.longitude,
       );
       String address = "${marks[0].street}, ${marks[0].locality}";
-
       String prefix = isCheckIn ? "check_in" : "check_out";
 
-      // Payload yang sudah benar (menggunakan _lat dan _lng terpisah)
       Map<String, dynamic> data = {
         "attendance_date": DateFormat('yyyy-MM-dd').format(DateTime.now()),
         prefix: DateFormat('HH:mm').format(DateTime.now()),
         "${prefix}_lat": pos.latitude.toString(),
-        "${prefix}_lng": pos.longitude.toString(), // Fix: lng (bukan long)
+        "${prefix}_lng": pos.longitude.toString(),
         "${prefix}_address": address,
       };
 
@@ -142,10 +151,14 @@ class _HomePageState extends State<HomePage>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text("Form Pengajuan Izin"),
         content: TextField(
           controller: alasanController,
-          decoration: const InputDecoration(hintText: "Contoh: Sakit demam"),
+          decoration: const InputDecoration(
+            hintText: "Contoh: Sakit demam",
+            border: OutlineInputBorder(),
+          ),
         ),
         actions: [
           TextButton(
@@ -153,6 +166,7 @@ class _HomePageState extends State<HomePage>
             child: const Text("Batal"),
           ),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: primaryYellow),
             onPressed: () async {
               if (alasanController.text.isEmpty) return;
               Navigator.pop(context);
@@ -170,7 +184,7 @@ class _HomePageState extends State<HomePage>
                 if (mounted) setState(() => isLoading = false);
               }
             },
-            child: const Text("Kirim"),
+            child: const Text("Kirim", style: TextStyle(color: Colors.black87)),
           ),
         ],
       ),
@@ -180,16 +194,16 @@ class _HomePageState extends State<HomePage>
   void _showSnackBar(String msg, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(msg),
+        content: Text(msg, style: const TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.all(20),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
       ),
     );
   }
 
-  // --- UI SECTION ---
+  // --- UI SECTION DENGAN SENTUHAN LOGO ---
 
   @override
   Widget build(BuildContext context) {
@@ -198,10 +212,35 @@ class _HomePageState extends State<HomePage>
       body: Stack(
         children: [
           _buildBackgroundMap(),
+          _buildCircleDecorations(), // Tambahan dekorasi elemen lingkaran
           _buildGradientOverlay(),
-          FadeTransition(opacity: _fadeAnimation, child: _buildMainContent()),
+          SafeArea(
+            child: FadeTransition(
+              opacity: _fadeAnimation,
+              child: SlideTransition(
+                position: _slideAnimation,
+                child: _buildMainContent(),
+              ),
+            ),
+          ),
           _buildCustomAppBar(),
         ],
+      ),
+    );
+  }
+
+  // Elemen lingkaran dekoratif agar mirip logo
+  Widget _buildCircleDecorations() {
+    return Positioned(
+      top: MediaQuery.of(context).size.height * 0.25,
+      right: -50,
+      child: Container(
+        width: 200,
+        height: 200,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: primaryYellow.withOpacity(0.3), width: 40),
+        ),
       ),
     );
   }
@@ -216,13 +255,13 @@ class _HomePageState extends State<HomePage>
           top: MediaQuery.of(context).padding.top + 10,
           left: 20,
           right: 20,
-          bottom: 20,
+          bottom: 25,
         ),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Colors.black.withOpacity(0.5), Colors.transparent],
+            colors: [Colors.black.withOpacity(0.6), Colors.transparent],
           ),
         ),
         child: Row(
@@ -242,19 +281,19 @@ class _HomePageState extends State<HomePage>
           children: [
             Text(
               DateFormat('EEEE, d MMMM').format(DateTime.now()),
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: primaryYellow,
                 fontSize: 14,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.bold,
               ),
             ),
             Text(
               DateFormat('HH:mm').format(DateTime.now()),
               style: const TextStyle(
                 color: Colors.white,
-                fontSize: 28,
+                fontSize: 32,
                 fontWeight: FontWeight.bold,
-                letterSpacing: 1,
+                letterSpacing: 1.5,
               ),
             ),
           ],
@@ -298,43 +337,46 @@ class _HomePageState extends State<HomePage>
           end: Alignment.bottomCenter,
           colors: [
             Colors.transparent,
-            lightBg.withOpacity(0.4),
+            lightBg.withOpacity(0.2),
             lightBg,
             lightBg,
           ],
-          stops: const [0.0, 0.4, 0.55, 1.0],
+          stops: const [0.0, 0.35, 0.5, 1.0],
         ),
       ),
     );
   }
 
   Widget _buildMainContent() {
-    return SafeArea(
-      child: RefreshIndicator(
-        onRefresh: _fetchTodayAttendance,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(height: MediaQuery.of(context).size.height * 0.35),
-              const SizedBox(height: 50),
-              _buildStatusGrid(),
-              const SizedBox(height: 30),
-              const Text(
-                "Presensi Hari Ini",
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+    return RefreshIndicator(
+      onRefresh: _fetchTodayAttendance,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(height: MediaQuery.of(context).size.height * 0.38),
+            _buildStatusGrid(),
+            const SizedBox(height: 30),
+            Row(
+              children: [
+                Container(width: 4, height: 20, color: primaryYellow),
+                const SizedBox(width: 8),
+                const Text(
+                  "Presensi Hari Ini",
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              _buildActionSection(),
-              const SizedBox(height: 40),
-            ],
-          ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _buildActionSection(),
+            const SizedBox(height: 40),
+          ],
         ),
       ),
     );
@@ -348,7 +390,7 @@ class _HomePageState extends State<HomePage>
             "Masuk",
             todayAttendance?.checkInTime ?? "--:--",
             Icons.login_rounded,
-            Colors.green,
+            primaryBlue,
           ),
         ),
         const SizedBox(width: 16),
@@ -357,7 +399,7 @@ class _HomePageState extends State<HomePage>
             "Pulang",
             todayAttendance?.checkOutTime ?? "--:--",
             Icons.logout_rounded,
-            Colors.orange,
+            primaryYellow,
           ),
         ),
       ],
@@ -366,13 +408,13 @@ class _HomePageState extends State<HomePage>
 
   Widget _buildInfoCard(String title, String time, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: color.withOpacity(0.1),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -380,10 +422,13 @@ class _HomePageState extends State<HomePage>
       ),
       child: Column(
         children: [
-          CircleAvatar(
-            radius: 18,
-            backgroundColor: color.withOpacity(0.1),
-            child: Icon(icon, color: color, size: 18),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 24),
           ),
           const SizedBox(height: 12),
           Text(
@@ -391,14 +436,15 @@ class _HomePageState extends State<HomePage>
             style: const TextStyle(
               color: Colors.black45,
               fontSize: 12,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.bold,
             ),
           ),
+          const SizedBox(height: 4),
           Text(
             time,
             style: TextStyle(
               color: primaryBlue,
-              fontSize: 20,
+              fontSize: 22,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -430,13 +476,11 @@ class _HomePageState extends State<HomePage>
             () => _processAbsence(true),
           ),
           const SizedBox(height: 12),
-          _buildSecondaryActionButton("Izin / Sakit", () {
-            _processIzin();
-          }),
+          _buildSecondaryActionButton("Izin / Sakit", () => _processIzin()),
         ] else ...[
           _buildMainActionButton(
             "CHECK OUT PULANG",
-            Colors.redAccent,
+            const Color(0xFFE53935),
             Icons.power_settings_new_rounded,
             () => _processAbsence(false),
           ),
@@ -451,39 +495,46 @@ class _HomePageState extends State<HomePage>
     IconData icon,
     VoidCallback action,
   ) {
-    return AnimatedScale(
-      scale: isLoading ? 0.95 : 1.0,
-      duration: const Duration(milliseconds: 200),
-      child: SizedBox(
-        width: double.infinity,
-        height: 65,
-        child: ElevatedButton.icon(
-          onPressed: isLoading ? null : action,
-          icon: isLoading
-              ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2,
-                  ),
-                )
-              : Icon(icon, color: Colors.white, size: 28),
-          label: Text(
-            isLoading ? "MEMPROSES..." : text,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
+    return Container(
+      width: double.infinity,
+      height: 70,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
           ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: color,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            elevation: 4,
+        ],
+      ),
+      child: ElevatedButton.icon(
+        onPressed: isLoading ? null : action,
+        icon: isLoading
+            ? const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2,
+                ),
+              )
+            : Icon(icon, color: Colors.white, size: 30),
+        label: Text(
+          isLoading ? "MEMPROSES..." : text,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 17,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1,
           ),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          elevation: 0,
         ),
       ),
     );
@@ -492,13 +543,13 @@ class _HomePageState extends State<HomePage>
   Widget _buildSecondaryActionButton(String text, VoidCallback action) {
     return SizedBox(
       width: double.infinity,
-      height: 55,
+      height: 60,
       child: OutlinedButton(
         onPressed: isLoading ? null : action,
         style: OutlinedButton.styleFrom(
-          side: BorderSide(color: primaryBlue.withOpacity(0.5)),
+          side: BorderSide(color: primaryBlue.withOpacity(0.3), width: 2),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
           ),
         ),
         child: Text(
@@ -506,7 +557,7 @@ class _HomePageState extends State<HomePage>
           style: TextStyle(
             color: primaryBlue,
             fontWeight: FontWeight.bold,
-            fontSize: 15,
+            fontSize: 16,
           ),
         ),
       ),
@@ -516,20 +567,23 @@ class _HomePageState extends State<HomePage>
   Widget _buildStatusTile(String message, Color color) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.2)),
+        color: color.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: color.withOpacity(0.2), width: 2),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: Column(
         children: [
-          Icon(Icons.check_circle_rounded, color: color),
-          const SizedBox(width: 10),
+          Icon(Icons.check_circle_outline_rounded, color: color, size: 40),
+          const SizedBox(height: 8),
           Text(
             message,
-            style: TextStyle(color: color, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w900,
+              fontSize: 16,
+            ),
           ),
         ],
       ),
@@ -550,19 +604,16 @@ class _HomePageState extends State<HomePage>
             padding: const EdgeInsets.all(3),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(
-                color: Colors.white.withOpacity(0.5),
-                width: 2,
-              ),
+              border: Border.all(color: primaryYellow, width: 2.5),
             ),
             child: CircleAvatar(
-              radius: 20,
+              radius: 24,
               backgroundColor: Colors.white,
               backgroundImage: (photoUrl != null && photoUrl.isNotEmpty)
                   ? NetworkImage(photoUrl)
                   : null,
               child: (photoUrl == null || photoUrl.isEmpty)
-                  ? Icon(Icons.person, color: primaryBlue)
+                  ? Icon(Icons.person, color: primaryBlue, size: 30)
                   : null,
             ),
           ),
