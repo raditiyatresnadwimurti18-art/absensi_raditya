@@ -1,4 +1,5 @@
 import 'package:absensi_raditya/api/controllers/auth.dart';
+import 'package:absensi_raditya/api/controllers/profile_controller.dart'; // Import ini penting
 import 'package:flutter/material.dart';
 import 'package:absensi_raditya/page/home/home_page.dart';
 import 'package:absensi_raditya/page/login/register.dart';
@@ -14,15 +15,19 @@ class _LoginPageState extends State<LoginPage> {
   final email = TextEditingController();
   final password = TextEditingController();
   bool isLoading = false;
-  bool obscurePassword = true; // Tambahan untuk fitur intip password
+  bool obscurePassword = true;
 
   final Color primaryBlue = const Color(0xFF005DA9);
   final Color secondaryYellow = const Color(0xFFFFCC00);
 
-  void login() async {
+  Future<void> login() async {
+    // Validasi input sederhana
     if (email.text.isEmpty || password.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Email dan Password wajib diisi")),
+        const SnackBar(
+          content: Text("Email dan Password wajib diisi"),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }
@@ -30,17 +35,30 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => isLoading = true);
 
     try {
-      // Memanggil controller yang sudah kita perbaiki tadi
+      // 1. Jalankan proses Login untuk mendapatkan Token
       final result = await AuthController.login(
-        email: email.text.trim(), // Trim untuk hapus spasi tak sengaja
+        email: email.text.trim(),
         password: password.text,
       );
 
       if (result != null && mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const HomePage()),
-        );
+        // 2. SINKRONISASI DATA PROFIL (Solusi agar profil tidak kosong)
+        // Setelah login sukses, langsung tarik data profil lengkap dari server
+        // dan simpan ke SharedPreferences melalui controller.
+        try {
+          await ProfileController.getProfile();
+        } catch (profileError) {
+          // Jika gagal ambil profil, log saja agar tidak menghentikan proses masuk
+          debugPrint("Gagal sinkronisasi data profil: $profileError");
+        }
+
+        // 3. Pindah ke Halaman Utama
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const HomePage()),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -63,20 +81,19 @@ class _LoginPageState extends State<LoginPage> {
       backgroundColor: Colors.white,
       body: SafeArea(
         child: Center(
-          // Ditambah Center agar form di tengah pada layar besar
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 30),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Logo Section
+                // --- LOGO SECTION ---
                 Column(
                   children: [
                     Container(
                       padding: const EdgeInsets.all(15),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        shape: BoxShape.circle, // Lebih rapi dengan Circle
+                        shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withOpacity(0.1),
@@ -86,7 +103,7 @@ class _LoginPageState extends State<LoginPage> {
                         ],
                       ),
                       child: Image.asset(
-                        'assets/images/logo.png', // Ganti ke path logo asli kamu
+                        'assets/images/logo.png',
                         height: 90,
                         errorBuilder: (context, error, stackTrace) => Icon(
                           Icons.account_circle,
@@ -113,10 +130,11 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 const SizedBox(height: 40),
 
-                // Form Input Email
+                // --- INPUT EMAIL ---
                 TextField(
                   controller: email,
                   keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
                   decoration: InputDecoration(
                     labelText: "Email",
                     prefixIcon: Icon(Icons.email_outlined, color: primaryBlue),
@@ -131,14 +149,16 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 const SizedBox(height: 20),
 
-                // Form Input Password
+                // --- INPUT PASSWORD ---
                 TextField(
                   controller: password,
                   obscureText: obscurePassword,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) =>
+                      login(), // Login saat tekan enter di keyboard
                   decoration: InputDecoration(
                     labelText: "Password",
                     prefixIcon: Icon(Icons.lock_outline, color: primaryBlue),
-                    // Fitur Show/Hide Password
                     suffixIcon: IconButton(
                       icon: Icon(
                         obscurePassword
@@ -160,7 +180,7 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 const SizedBox(height: 30),
 
-                // Login Button
+                // --- TOMBOL LOGIN ---
                 isLoading
                     ? CircularProgressIndicator(color: primaryBlue)
                     : ElevatedButton(
@@ -185,7 +205,7 @@ class _LoginPageState extends State<LoginPage> {
 
                 const SizedBox(height: 25),
 
-                // Link ke Register
+                // --- FOOTER REGISTER ---
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [

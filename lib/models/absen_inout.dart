@@ -23,10 +23,6 @@ class AttendanceData {
   DateTime? attendanceDate;
   String? checkInTime;
   String? checkOutTime;
-  String? checkInLocation;
-  String? checkOutLocation;
-  String? checkInAddress;
-  String? checkOutAddress;
   String? status;
   String? alasanIzin;
 
@@ -35,25 +31,19 @@ class AttendanceData {
     this.attendanceDate,
     this.checkInTime,
     this.checkOutTime,
-    this.checkInLocation,
-    this.checkOutLocation,
-    this.checkInAddress,
-    this.checkOutAddress,
     this.status,
     this.alasanIzin,
   });
 
   factory AttendanceData.fromJson(Map<String, dynamic> json) => AttendanceData(
     id: json["id"],
-    attendanceDate: json["attendance_date"] == null
-        ? null
-        : DateTime.parse(json["attendance_date"]),
+    attendanceDate: json["attendance_date"] != null
+        ? DateTime.parse(json["attendance_date"])
+        : (json["date"] != null
+              ? DateTime.parse(json["date"])
+              : null), // Fallback ke "date"
     checkInTime: json["check_in_time"] ?? json["check_in"],
     checkOutTime: json["check_out_time"] ?? json["check_out"],
-    checkInLocation: json["check_in_location"],
-    checkOutLocation: json["check_out_location"],
-    checkInAddress: json["check_in_address"],
-    checkOutAddress: json["check_out_address"],
     status: json["status"],
     alasanIzin: json["alasan_izin"],
   );

@@ -1,10 +1,14 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
+
+// Pastikan import ini sesuai dengan struktur folder projectmu
 import 'package:absensi_raditya/api/preferences.dart';
-import 'package:absensi_raditya/models/usermodel.dart';
-import 'package:absensi_raditya/page/login/login.dart';
+import 'package:absensi_raditya/models/profile_model.dart';
 import 'package:absensi_raditya/api/controllers/profile_controller.dart';
+import 'package:absensi_raditya/page/login/login.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -17,11 +21,37 @@ class _ProfilePageState extends State<ProfilePage> {
   final Color primaryBlue = const Color(0xFF005DA9);
   final Color secondaryYellow = const Color(0xFFFFCC00);
 
-  final ProfileController _controller = ProfileController();
   bool _isLoading = false;
+  late Future<Map<String, dynamic>?> _userFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLocalData();
+  }
+
+  // Memuat data dari lokal (SharedPreferences)
+  void _loadLocalData() {
+    setState(() {
+      _userFuture = AuthPreferences.getUserData();
+    });
+  }
+
+  // Fungsi krusial: Ambil data terbaru dari server -> Simpan ke Lokal -> Update UI
+  Future<void> _refreshData() async {
+    try {
+      // getProfile() di dalam controller harus sudah memanggil AuthPreferences.saveUserData
+      await ProfileController.getProfile();
+      if (mounted) {
+        _loadLocalData();
+      }
+    } catch (e) {
+      debugPrint("Gagal sinkronisasi data: $e");
+    }
+  }
 
   // --- LOGIKA UPDATE FOTO ---
-  Future<void> _pickAndUploadImage() async {
+  Future<void> _pickAndUploadImage(String currentName) async {
     final picker = ImagePicker();
     final XFile? pickedFile = await picker.pickImage(
       source: ImageSource.gallery,
@@ -29,29 +59,45 @@ class _ProfilePageState extends State<ProfilePage> {
     );
 
     if (pickedFile != null) {
-      // 1. Ambil Messenger sebelum async jika ingin sangat aman
       final messenger = ScaffoldMessenger.of(context);
-
       setState(() => _isLoading = true);
-      final result = await _controller.updateUserPhoto(pickedFile.path);
-      setState(() => _isLoading = false);
 
-      if (!mounted) return;
+      try {
+        File file = File(pickedFile.path);
+        String base64Image = base64Encode(await file.readAsBytes());
 
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(result['message'] ?? "Proses selesai"),
-          backgroundColor: result['success'] ? Colors.green : Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+        // 1. Upload ke API
+        await ProfileController.editFoto(
+          base64String: base64Image,
+          name: currentName,
+        );
 
-      if (result['success']) setState(() {});
+        // 2. Paksa ambil data terbaru dari server agar lokal terupdate
+        await _refreshData();
+
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text("Foto profil berhasil diperbarui!"),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } catch (e) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text("Gagal memperbarui foto: $e"),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
     }
   }
 
   // --- LOGIKA EDIT NAMA ---
-  void _showEditNameDialog(String currentName) {
+  void _showEditNameDialog(String currentName, String currentEmail) {
     TextEditingController nameController = TextEditingController(
       text: currentName,
     );
@@ -77,32 +123,37 @@ class _ProfilePageState extends State<ProfilePage> {
             style: ElevatedButton.styleFrom(backgroundColor: primaryBlue),
             onPressed: () async {
               if (nameController.text.isNotEmpty) {
-                // STRATEGI PERBAIKAN:
-                // Simpan referensi messenger SEBELUM pop dialog
                 final messenger = ScaffoldMessenger.of(context);
-
-                Navigator.pop(dialogContext); // Tutup dialog
+                Navigator.pop(dialogContext);
 
                 setState(() => _isLoading = true);
-                final result = await _controller.updateUserName(
-                  nameController.text,
-                );
-                setState(() => _isLoading = false);
+                try {
+                  await ProfileController.updateProfile(
+                    name: nameController.text.trim(),
+                    email: currentEmail,
+                  );
 
-                // Pastikan widget utama masih ada di tree
-                if (!mounted) return;
+                  // Sinkronisasi data setelah update nama
+                  await _refreshData();
 
-                messenger.showSnackBar(
-                  SnackBar(
-                    content: Text(result['message'] ?? "Sukses"),
-                    backgroundColor: result['success']
-                        ? Colors.green
-                        : Colors.red,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-
-                if (result['success']) setState(() {});
+                  messenger.showSnackBar(
+                    const SnackBar(
+                      content: Text("Nama berhasil diperbarui!"),
+                      backgroundColor: Colors.green,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                } catch (e) {
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text("Gagal memperbarui nama: $e"),
+                      backgroundColor: Colors.red,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                } finally {
+                  if (mounted) setState(() => _isLoading = false);
+                }
               }
             },
             child: const Text("SIMPAN", style: TextStyle(color: Colors.white)),
@@ -130,7 +181,7 @@ class _ProfilePageState extends State<ProfilePage> {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () async {
               await AuthPreferences.logout();
-              if (mounted) {
+              if (context.mounted) {
                 Navigator.of(context).pushAndRemoveUntil(
                   MaterialPageRoute(builder: (_) => const LoginPage()),
                   (route) => false,
@@ -164,167 +215,200 @@ class _ProfilePageState extends State<ProfilePage> {
       body: Stack(
         children: [
           FutureBuilder<Map<String, dynamic>?>(
-            future: AuthPreferences.getUserData(),
+            future: _userFuture,
             builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
+              if (snapshot.connectionState == ConnectionState.waiting &&
+                  !_isLoading) {
                 return const Center(child: CircularProgressIndicator());
               }
 
               if (!snapshot.hasData || snapshot.data == null) {
-                return const Center(
-                  child: Text("Data profil tidak ditemukan."),
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text("Data profil tidak ditemukan."),
+                      const SizedBox(height: 10),
+                      ElevatedButton(
+                        onPressed: _refreshData,
+                        child: const Text("Refresh"),
+                      ),
+                    ],
+                  ),
                 );
               }
 
-              final userData = User.fromJson(snapshot.data!);
+              final userData = Data.fromJson(snapshot.data!);
 
-              return SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 20,
-                ),
-                child: Column(
-                  children: [
-                    Center(
-                      child: Stack(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: secondaryYellow,
-                                width: 3,
+              return RefreshIndicator(
+                onRefresh: _refreshData,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 20,
+                  ),
+                  child: Column(
+                    children: [
+                      // --- FOTO PROFIL SECTION ---
+                      Center(
+                        child: Stack(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: secondaryYellow,
+                                  width: 3,
+                                ),
+                              ),
+                              child: CircleAvatar(
+                                radius: 55,
+                                backgroundColor: primaryBlue,
+                                backgroundImage:
+                                    (userData.profilePhotoUrl != null &&
+                                        userData.profilePhotoUrl!.isNotEmpty)
+                                    ? NetworkImage(
+                                        "${userData.profilePhotoUrl}?t=${DateTime.now().millisecondsSinceEpoch}",
+                                      )
+                                    : null,
+                                child:
+                                    (userData.profilePhotoUrl == null ||
+                                        userData.profilePhotoUrl!.isEmpty)
+                                    ? const Icon(
+                                        Icons.person,
+                                        size: 60,
+                                        color: Colors.white,
+                                      )
+                                    : null,
                               ),
                             ),
-                            child: CircleAvatar(
-                              radius: 55,
-                              backgroundColor: primaryBlue,
-                              backgroundImage:
-                                  (userData.profilePhoto != null &&
-                                      userData.profilePhoto!.isNotEmpty)
-                                  ? NetworkImage(userData.profilePhoto!)
-                                  : null,
-                              child:
-                                  (userData.profilePhoto == null ||
-                                      userData.profilePhoto!.isEmpty)
-                                  ? const Icon(
-                                      Icons.person,
-                                      size: 60,
+                            Positioned(
+                              bottom: 0,
+                              right: 0,
+                              child: GestureDetector(
+                                onTap: () =>
+                                    _pickAndUploadImage(userData.name ?? ""),
+                                child: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: secondaryYellow,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
                                       color: Colors.white,
-                                    )
-                                  : null,
-                            ),
-                          ),
-                          Positioned(
-                            bottom: 0,
-                            right: 0,
-                            child: GestureDetector(
-                              onTap: _pickAndUploadImage,
-                              child: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: secondaryYellow,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white,
-                                    width: 2,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    Icons.camera_alt,
+                                    size: 20,
+                                    color: Colors.black87,
                                   ),
                                 ),
-                                child: const Icon(
-                                  Icons.camera_alt,
-                                  size: 20,
-                                  color: Colors.black87,
-                                ),
                               ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // --- NAMA & EMAIL SECTION ---
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              userData.name?.toUpperCase() ?? "PENGGUNA",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: primaryBlue,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: Icon(
+                              Icons.edit_note_rounded,
+                              color: primaryBlue,
+                            ),
+                            onPressed: () => _showEditNameDialog(
+                              userData.name ?? "",
+                              userData.email ?? "",
                             ),
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            userData.name?.toUpperCase() ??
-                                "NAMA TIDAK TERSEDIA",
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: primaryBlue,
+                      Text(
+                        userData.email ?? "-",
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+
+                      // --- DETAIL INFORMASI SECTION ---
+                      _buildSectionTitle("Informasi Pelatihan"),
+                      _buildInfoTile(
+                        Icons.school_rounded,
+                        "Program Pelatihan",
+                        userData.training?.title ?? "-",
+                      ),
+                      _buildInfoTile(
+                        Icons.layers_rounded,
+                        "Angkatan / Batch",
+                        "Batch ${userData.batch?.batchKe ?? '-'}",
+                      ),
+
+                      const SizedBox(height: 16),
+                      _buildSectionTitle("Data Pribadi"),
+                      _buildInfoTile(
+                        Icons.wc_rounded,
+                        "Jenis Kelamin",
+                        userData.jenisKelamin == 'L'
+                            ? 'Laki-laki'
+                            : 'Perempuan',
+                      ),
+                      _buildInfoTile(
+                        Icons.calendar_month_rounded,
+                        "Periode Pelatihan",
+                        userData.batch?.startDate != null
+                            ? "${DateFormat('dd/MM/yyyy').format(userData.batch!.startDate!)} - ${DateFormat('dd/MM/yyyy').format(userData.batch!.endDate!)}"
+                            : "-",
+                      ),
+
+                      const SizedBox(height: 40),
+
+                      // --- TOMBOL LOGOUT ---
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () => _showLogoutDialog(context),
+                          icon: const Icon(Icons.logout_rounded),
+                          label: const Text(
+                            "KELUAR DARI AKUN",
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.red,
+                            side: const BorderSide(color: Colors.red),
+                            padding: const EdgeInsets.symmetric(vertical: 15),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
                             ),
                           ),
                         ),
-                        IconButton(
-                          icon: Icon(
-                            Icons.edit_note_rounded,
-                            color: primaryBlue,
-                          ),
-                          onPressed: () =>
-                              _showEditNameDialog(userData.name ?? ""),
-                        ),
-                      ],
-                    ),
-                    Text(
-                      userData.email ?? "-",
-                      style: TextStyle(
-                        color: Colors.grey.shade600,
-                        fontSize: 14,
                       ),
-                    ),
-                    const SizedBox(height: 32),
-                    _buildSectionTitle("Informasi Pelatihan"),
-                    _buildInfoTile(
-                      Icons.school_rounded,
-                      "Program Pelatihan",
-                      userData.training?.title ?? "-",
-                    ),
-                    _buildInfoTile(
-                      Icons.layers_rounded,
-                      "Angkatan / Batch",
-                      "Batch ${userData.batch?.batchKe ?? '-'}",
-                    ),
-                    const SizedBox(height: 16),
-                    _buildSectionTitle("Data Pribadi"),
-                    _buildInfoTile(
-                      Icons.wc_rounded,
-                      "Jenis Kelamin",
-                      userData.jenisKelamin == 'L' ? 'Laki-laki' : 'Perempuan',
-                    ),
-                    _buildInfoTile(
-                      Icons.calendar_month_rounded,
-                      "Periode",
-                      "${userData.batch?.startDate ?? ''} - ${userData.batch?.endDate ?? ''}",
-                    ),
-                    const SizedBox(height: 40),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: () => _showLogoutDialog(context),
-                        icon: const Icon(Icons.logout_rounded),
-                        label: const Text(
-                          "KELUAR DARI AKUN",
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.red,
-                          side: const BorderSide(color: Colors.red),
-                          padding: const EdgeInsets.symmetric(vertical: 15),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                  ],
+                      const SizedBox(height: 20),
+                    ],
+                  ),
                 ),
               );
             },
           ),
+          // LOADING OVERLAY
           if (_isLoading)
             Container(
               color: Colors.black45,
