@@ -309,7 +309,7 @@ class _HistoryPageState extends State<HistoryPage> {
     try {
       DateTime dt = DateTime.parse(dateStr);
       // Format Indonesia (Senin, 08 Apr 2026)
-      return DateFormat('EEEE, dd MMM yyyy').format(dt);
+      return DateFormat('EEEE, dd MMM yyyy', 'id_ID').format(dt);
     } catch (e) {
       return dateStr;
     }

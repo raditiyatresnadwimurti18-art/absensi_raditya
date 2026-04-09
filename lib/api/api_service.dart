@@ -143,14 +143,20 @@ class ApiService {
     String token,
     Map<String, dynamic> body,
   ) async {
-    final url = Uri.parse("$baseUrl/$endpoint");
-    return await http.delete(
-      url,
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer $token",
-      },
-      body: jsonEncode(body),
-    );
+    try {
+      final url = Uri.parse("$baseUrl/$endpoint");
+      final response = await http.delete(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(body), // Penting: Mengirim data kredensial
+      );
+      return response;
+    } catch (e) {
+      rethrow;
+    }
   }
 }

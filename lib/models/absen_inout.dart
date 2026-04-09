@@ -36,7 +36,7 @@ class AttendanceData {
   });
 
   factory AttendanceData.fromJson(Map<String, dynamic> json) => AttendanceData(
-    id: json["id"],
+    id: json["id"] is String ? int.tryParse(json["id"]) : json["id"],
     attendanceDate: json["attendance_date"] != null
         ? DateTime.parse(json["attendance_date"])
         : (json["date"] != null

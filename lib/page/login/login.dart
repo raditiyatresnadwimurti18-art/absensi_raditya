@@ -196,7 +196,7 @@ class _LoginPageState extends State<LoginPage>
         ),
         const SizedBox(height: 8),
         Text(
-          "Absensi Raditya - Solusi Kerja Pintar",
+          "Absensi Digital - Solusi Kerja Pintar",
           style: TextStyle(color: Colors.grey[600], fontSize: 14),
         ),
       ],

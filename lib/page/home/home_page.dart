@@ -84,11 +84,41 @@ class _HomePageState extends State<HomePage>
   Future<void> _fetchTodayAttendance() async {
     if (!mounted) return;
     setState(() => isLoadingAttendance = true);
+
     try {
+      // 1. Ambil data status hari ini (untuk tampilan Check-in/Out)
       final response = await AttendanceController.getTodayAttendance();
-      setState(() => todayAttendance = response.data);
+      AttendanceData? data = response.data;
+
+      // 2. Ambil Riwayat untuk mencari ID aslinya
+      final historyResponse = await AttendanceController.getHistory();
+
+      // Dapatkan tanggal hari ini dalam format yang sama dengan API (yyyy-MM-dd)
+      String todayStr = DateFormat(
+        'yyyy-MM-dd',
+        'id_ID',
+      ).format(DateTime.now());
+
+      // 3. Cari data di riwayat yang tanggalnya sama dengan hari ini
+      // Kita gunakan .firstWhere atau .find
+      try {
+        final todayRecord = historyResponse.data?.firstWhere(
+          (element) => element.attendanceDate == todayStr,
+        );
+
+        if (todayRecord != null && data != null) {
+          // Tempelkan ID dari history ke data today agar fungsi delete bisa jalan
+          data.id = todayRecord.id;
+          debugPrint("ID Ditemukan dari History: ${data.id}");
+        }
+      } catch (e) {
+        debugPrint("Belum ada data di history untuk hari ini.");
+      }
+
+      setState(() => todayAttendance = data);
     } catch (e) {
       debugPrint("Error Fetch: $e");
+      setState(() => todayAttendance = null);
     } finally {
       if (mounted) setState(() => isLoadingAttendance = false);
     }
@@ -118,8 +148,11 @@ class _HomePageState extends State<HomePage>
       String prefix = isCheckIn ? "check_in" : "check_out";
 
       Map<String, dynamic> data = {
-        "attendance_date": DateFormat('yyyy-MM-dd').format(DateTime.now()),
-        prefix: DateFormat('HH:mm').format(DateTime.now()),
+        "attendance_date": DateFormat(
+          'yyyy-MM-dd',
+          'id_ID',
+        ).format(DateTime.now()),
+        prefix: DateFormat('HH:mm', 'id_ID').format(DateTime.now()),
         "${prefix}_lat": pos.latitude.toString(),
         "${prefix}_lng": pos.longitude.toString(),
         "${prefix}_address": address,
@@ -204,49 +237,119 @@ class _HomePageState extends State<HomePage>
   }
 
   void _processDeleteAbsence() async {
-    // 1. Ambil data user dari preferences
     final userData = await AuthPreferences.getUserData();
+    final int? currentAttendanceId = todayAttendance?.id;
 
-    // 2. Ambil ID dari todayAttendance yang didapat dari getTodayAttendance()
-    final int? attendanceId = todayAttendance?.id;
+    // Controller untuk menangkap input password dari user
+    final TextEditingController passwordConfirmController =
+        TextEditingController();
 
-    if (attendanceId == null) {
-      _showSnackBar(
-        "ID Absen tidak ditemukan. Coba refresh halaman.",
-        Colors.orange,
-      );
+    if (currentAttendanceId == null) {
+      _showSnackBar("ID Absensi tidak valid", Colors.orange);
       return;
     }
 
-    setState(() => isLoading = true);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          "Konfirmasi Keamanan",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              "Masukkan password akun Anda untuk menghapus data absensi hari ini.",
+              style: TextStyle(color: Colors.black87, fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: passwordConfirmController,
+              obscureText: true, // Agar password tidak terlihat
+              decoration: InputDecoration(
+                hintText: "Password Anda",
+                prefixIcon: const Icon(Icons.lock_outline),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: primaryBlue),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              passwordConfirmController.dispose();
+              Navigator.pop(context);
+            },
+            child: const Text("Batal", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () async {
+              String inputPassword = passwordConfirmController.text.trim();
 
-    try {
-      // 3. Eksekusi hapus langsung ke API
-      await AttendanceController.deleteAttendance(
-        attendanceId,
-        userData?['name'] ?? "User", // Ambil dari prefs
-        userData?['email'] ?? "", // Ambil dari prefs
-        "!1Aa1111!", // Sesuaikan password ini
-      );
+              if (inputPassword.isEmpty) {
+                _showSnackBar("Password wajib diisi!", Colors.orange);
+                return;
+              }
 
-      // 4. Jika sukses, tampilkan pesan dan paksa refresh UI
-      _showSnackBar("Data absen berhasil dihapus!", Colors.blueGrey);
+              Navigator.pop(context); // Tutup dialog
+              setState(() => isLoading = true);
 
-      // Reset data lokal sebelum fetch ulang agar tombol kembali ke 'Check In'
-      setState(() {
-        todayAttendance = null;
-      });
+              try {
+                // Sekarang kita kirim inputPassword, bukan hardcoded lagi
+                final result = await AttendanceController.deleteAttendance(
+                  currentAttendanceId,
+                  userData?['name'] ?? "",
+                  userData?['email'] ?? "",
+                  inputPassword, // <--- Hasil input dari user
+                );
 
-      _fetchTodayAttendance();
-    } catch (e) {
-      debugPrint("Error Delete: $e");
-      _showSnackBar(
-        "Gagal: ${e.toString().replaceAll("Exception: ", "")}",
-        Colors.red,
-      );
-    } finally {
-      if (mounted) setState(() => isLoading = false);
-    }
+                if (mounted) {
+                  _showSnackBar(
+                    result.message ?? "Berhasil dihapus",
+                    Colors.blueGrey,
+                  );
+
+                  setState(() {
+                    todayAttendance = null;
+                    isLoadingAttendance = true;
+                  });
+                  await _fetchTodayAttendance();
+                  if (mounted) {
+                    setState(() {});
+                  }
+                }
+              } catch (e) {
+                debugPrint("DEBUG ERROR API: $e");
+                if (mounted) {
+                  _showSnackBar(e.toString(), Colors.redAccent);
+                }
+              } finally {
+                passwordConfirmController.dispose(); // Bersihkan controller
+                if (mounted) setState(() => isLoading = false);
+              }
+            },
+            child: const Text(
+              "Hapus Sekarang",
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // --- UI SECTION DENGAN SENTUHAN LOGO ---
@@ -258,7 +361,7 @@ class _HomePageState extends State<HomePage>
       body: Stack(
         children: [
           _buildBackgroundMap(),
-          _buildCircleDecorations(), // Tambahan dekorasi elemen lingkaran
+          _buildCircleDecorations(),
           _buildGradientOverlay(),
           SafeArea(
             child: FadeTransition(
@@ -326,7 +429,7 @@ class _HomePageState extends State<HomePage>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              DateFormat('EEEE, d MMMM').format(DateTime.now()),
+              DateFormat('EEEE, d MMMM', 'id_ID').format(DateTime.now()),
               style: TextStyle(
                 color: primaryYellow,
                 fontSize: 14,
@@ -334,7 +437,7 @@ class _HomePageState extends State<HomePage>
               ),
             ),
             Text(
-              DateFormat('HH:mm').format(DateTime.now()),
+              DateFormat('HH:mm', 'id_ID').format(DateTime.now()),
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 32,
@@ -503,38 +606,58 @@ class _HomePageState extends State<HomePage>
     if (isLoadingAttendance)
       return const Center(child: CircularProgressIndicator());
 
+    bool hasDataToday = todayAttendance != null;
     bool hasCheckIn = todayAttendance?.checkInTime != null;
     bool hasCheckOut = todayAttendance?.checkOutTime != null;
     bool isIzin = todayAttendance?.status?.toLowerCase() == "izin";
 
     return Column(
       children: [
-        if (isIzin) ...[
-          _buildStatusTile("Anda sedang Izin/Sakit", Colors.orange),
-          const SizedBox(height: 12),
-          _buildDeleteButton(), // Tombol hapus jika ingin membatalkan izin
-        ] else if (hasCheckOut) ...[
-          _buildStatusTile("Presensi hari ini selesai", Colors.green),
-          const SizedBox(height: 12),
-          _buildDeleteButton(), // Tombol hapus jika ingin mengulang absen
-        ] else if (hasCheckIn) ...[
+        if (isIzin)
+          _buildStatusTile("Anda sedang Izin/Sakit", Colors.orange)
+        else if (hasCheckOut)
+          _buildStatusTile("Presensi hari ini selesai", Colors.green)
+        else if (hasCheckIn)
           _buildMainActionButton(
             "CHECK OUT PULANG",
             const Color(0xFFE53935),
             Icons.power_settings_new_rounded,
             () => _processAbsence(false),
+          )
+        else
+          Column(
+            children: [
+              _buildMainActionButton(
+                "CHECK IN MASUK",
+                primaryBlue,
+                Icons.fingerprint_rounded,
+                () => _processAbsence(true),
+              ),
+              const SizedBox(height: 12),
+              _buildSecondaryActionButton("Izin / Sakit", () => _processIzin()),
+            ],
           ),
-          const SizedBox(height: 12),
-          _buildDeleteButton(), // Tombol hapus muncul di bawah tombol check-out
-        ] else ...[
-          _buildMainActionButton(
-            "CHECK IN MASUK",
-            primaryBlue,
-            Icons.fingerprint_rounded,
-            () => _processAbsence(true),
+
+        // TOMBOL DELETE: Hanya muncul jika ada data (Check-in atau Izin)
+        if (hasDataToday) ...[
+          const SizedBox(height: 24),
+          Divider(color: Colors.grey.withOpacity(0.2)),
+          const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: isLoading ? null : _processDeleteAbsence,
+            icon: Icon(
+              Icons.delete_sweep_outlined,
+              color: Colors.red.withOpacity(0.8),
+            ),
+            label: Text(
+              "Hapus Data Hari Ini",
+              style: TextStyle(
+                color: Colors.red.withOpacity(0.8),
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
           ),
-          const SizedBox(height: 12),
-          _buildSecondaryActionButton("Izin / Sakit", () => _processIzin()),
         ],
       ],
     );

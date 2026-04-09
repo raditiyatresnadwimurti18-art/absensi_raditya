@@ -4,6 +4,7 @@ import 'package:absensi_raditya/api/api_service.dart';
 import 'package:absensi_raditya/api/preferences.dart';
 import 'package:absensi_raditya/models/absen_inout.dart';
 import 'package:absensi_raditya/models/riwayat_absen.dart';
+import 'package:absensi_raditya/models/delete_model.dart';
 import 'package:intl/intl.dart';
 
 class AttendanceController {
@@ -97,29 +98,40 @@ class AttendanceController {
     }
   }
 
-  static Future<void> deleteAttendance(
+  // attendance_controller.dart
+
+  static Future<DeleteModel> deleteAttendance(
     int id,
     String name,
     String email,
     String password,
   ) async {
-    String? token = await AuthPreferences.getToken();
-    if (token == null) throw Exception("Sesi berakhir.");
+    try {
+      String? token = await AuthPreferences.getToken();
 
-    // Body sesuai gambar Postman yang kamu berikan
-    Map<String, dynamic> body = {
-      "name": name,
-      "email": email,
-      "password": password,
-    };
+      Map<String, dynamic> body = {
+        "name": name,
+        "email": email,
+        "password": password,
+      };
 
-    // Endpoint: /api/absen/{id}
-    final response = await ApiService.delete("absen/$id", token, body);
+      final response = await ApiService.delete("absen/$id", token ?? "", body);
 
-    final result = jsonDecode(response.body);
+      // Kita decode dulu body-nya untuk mengecek isinya
+      final Map<String, dynamic> responseData = jsonDecode(response.body);
 
-    if (response.statusCode != 200) {
-      throw Exception(result['message'] ?? "Gagal menghapus data dari server.");
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        // Jika status sukses, kembalikan model lengkap
+        return DeleteModel.fromJson(responseData);
+      } else {
+        // Jika status gagal (400, 401, 500, dll), kita "LEMPAR" pesannya ke blok catch di UI
+        // responseData['message'] mengambil pesan error dari JSON API kamu
+        throw responseData['message'] ??
+            "Terjadi kesalahan server (${response.statusCode})";
+      }
+    } catch (e) {
+      // Melemparkan error agar ditangkap oleh UI
+      rethrow;
     }
   }
 }
