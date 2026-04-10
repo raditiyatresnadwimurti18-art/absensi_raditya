@@ -1,4 +1,4 @@
-package com.example.absensi_raditya
+package com.radit.absensi_raditya
 
 import io.flutter.embedding.android.FlutterActivity
 
