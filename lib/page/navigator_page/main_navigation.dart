@@ -1,4 +1,4 @@
-import 'package:absensi_raditya/page/home/home_page.dart';
+import 'package:absensi_raditya/page/home_page.dart';
 import 'package:flutter/material.dart';
 import 'package:absensi_raditya/page/history_page.dart';
 

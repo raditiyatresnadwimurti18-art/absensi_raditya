@@ -13,7 +13,7 @@ dependencies:
   intl: ^0.20.2
   geolocator: ^14.0.2
   google_maps_flutter: ^2.13.1
-  provider: ^6.1.5+1
+  provider: ^6.1.2
   shared_preferences: ^2.5.4
   flutter_launcher_icons: ^0.14.4
   geocoding: ^3.0.0
