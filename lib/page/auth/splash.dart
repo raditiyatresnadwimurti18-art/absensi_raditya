@@ -1,7 +1,7 @@
-import 'package:absensi_raditya/page/navigator_page/main_navigation.dart';
+import 'package:absensi_raditya/navigator_page/main_navigation.dart';
 import 'package:flutter/material.dart';
 import 'package:absensi_raditya/api/preferences.dart';
-import 'package:absensi_raditya/page/login/login.dart';
+import 'package:absensi_raditya/page/auth/login.dart';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});

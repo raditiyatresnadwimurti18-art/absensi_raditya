@@ -1,8 +1,8 @@
 import 'package:absensi_raditya/api/controllers/auth.dart';
 import 'package:absensi_raditya/api/controllers/profile_controller.dart';
-import 'package:absensi_raditya/page/navigator_page/main_navigation.dart';
+import 'package:absensi_raditya/navigator_page/main_navigation.dart';
 import 'package:flutter/material.dart';
-import 'package:absensi_raditya/page/login/register.dart';
+import 'package:absensi_raditya/page/auth/register.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});

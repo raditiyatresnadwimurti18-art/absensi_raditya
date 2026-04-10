@@ -1,4 +1,4 @@
-import 'package:absensi_raditya/page/providers/theme_provider.dart';
+import 'package:absensi_raditya/providers/theme_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
