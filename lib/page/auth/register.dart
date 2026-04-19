@@ -1,5 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:absensi_raditya/api/api_service.dart';
 import 'package:absensi_raditya/api/controllers/auth.dart';
+import 'package:absensi_raditya/models/batch_model.dart';
+import 'package:absensi_raditya/models/training_model.dart';
+import 'package:absensi_raditya/navigator_page/main_navigation.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -14,10 +19,14 @@ class _RegisterPageState extends State<RegisterPage>
   final email = TextEditingController();
   final password = TextEditingController();
 
+  List<BatchModel> listBatches = [];
+  List<TrainingModel> filteredTrainings = [];
+
   String? selectedBatchId;
   String? selectedTrainingId;
   String? selectedGender;
   bool isLoading = false;
+  bool isDataLoading = true;
 
   final Color primaryBlue = const Color(0xFF005DA9);
   final Color secondaryYellow = const Color(0xFFFFCC00);
@@ -35,6 +44,55 @@ class _RegisterPageState extends State<RegisterPage>
     );
     _fadeIn = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
     _controller.forward();
+    fetchInitialData();
+  }
+
+  void fetchInitialData() async {
+    try {
+      final response = await ApiService.getBatches();
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> responseData = jsonDecode(response.body);
+        final dynamic data = responseData['data'];
+
+        if (data != null && data is List) {
+          setState(() {
+            listBatches = data.map((e) => BatchModel.fromJson(e)).toList();
+            isDataLoading = false;
+          });
+        } else {
+          _showSnackBar("Format data tidak sesuai", Colors.orange);
+          setState(() => isDataLoading = false);
+        }
+      } else {
+        final Map<String, dynamic> errorData = jsonDecode(response.body);
+        _showSnackBar(
+            errorData['message'] ?? "Gagal mengambil data pelatihan", Colors.red);
+        setState(() => isDataLoading = false);
+      }
+    } catch (e) {
+      debugPrint("Error fetching data: $e");
+      _showSnackBar("Terjadi kesalahan: $e", Colors.red);
+      setState(() => isDataLoading = false);
+    }
+  }
+
+  void onBatchChanged(String? val) {
+    setState(() {
+      selectedBatchId = val;
+      selectedTrainingId = null; // Reset jurusan saat batch berubah
+
+      if (val != null && listBatches.isNotEmpty) {
+        // Cari batch yang dipilih dari list secara aman
+        try {
+          final batch = listBatches.firstWhere((b) => b.id.toString() == val);
+          filteredTrainings = batch.trainings;
+        } catch (e) {
+          filteredTrainings = [];
+        }
+      } else {
+        filteredTrainings = [];
+      }
+    });
   }
 
   @override
@@ -46,7 +104,6 @@ class _RegisterPageState extends State<RegisterPage>
     super.dispose();
   }
 
-  // --- LOGIKA REGISTER (Tetap) ---
   void register() async {
     if (name.text.isEmpty ||
         email.text.isEmpty ||
@@ -60,7 +117,7 @@ class _RegisterPageState extends State<RegisterPage>
 
     setState(() => isLoading = true);
     try {
-      await AuthController.register(
+      final result = await AuthController.register(
         name: name.text,
         email: email.text,
         password: password.text,
@@ -69,9 +126,16 @@ class _RegisterPageState extends State<RegisterPage>
         jenisKelamin: selectedGender!,
       );
 
-      if (mounted) {
-        Navigator.pop(context);
-        _showSnackBar("Registrasi Berhasil! Silakan Login", Colors.green);
+      if (mounted && result != null) {
+        // Karena AuthController.register sudah menyimpan data login,
+        // kita bisa langsung arahkan ke halaman utama atau minta login ulang.
+        // Jika ingin otomatis login:
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const MainNavigation()),
+          (route) => false,
+        );
+        _showSnackBar("Registrasi Berhasil! Selamat Datang", Colors.green);
       }
     } catch (e) {
       _showSnackBar(
@@ -94,7 +158,6 @@ class _RegisterPageState extends State<RegisterPage>
     );
   }
 
-  // --- UI DESIGN ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -109,94 +172,101 @@ class _RegisterPageState extends State<RegisterPage>
         elevation: 0,
         centerTitle: true,
       ),
-      body: FadeTransition(
-        opacity: _fadeIn,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            children: [
-              const SizedBox(height: 10),
-              _buildHeaderIcon(),
-              const SizedBox(height: 30),
+      body: isDataLoading
+          ? Center(child: CircularProgressIndicator(color: primaryBlue))
+          : FadeTransition(
+              opacity: _fadeIn,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 10),
+                    _buildHeaderIcon(),
+                    const SizedBox(height: 30),
 
-              // Form Inputs
-              _buildCardWrapper(
-                children: [
-                  _buildInput(
-                    name,
-                    "Nama Lengkap",
-                    Icons.person_outline_rounded,
-                  ),
-                  _buildInput(
-                    email,
-                    "Email",
-                    Icons.email_outlined,
-                    type: TextInputType.emailAddress,
-                  ),
-                  _buildInput(
-                    password,
-                    "Password",
-                    Icons.lock_outline_rounded,
-                    obscure: true,
-                  ),
+                    // Form Inputs
+                    _buildCardWrapper(
+                      children: [
+                        _buildInput(
+                          name,
+                          "Nama Lengkap",
+                          Icons.person_outline_rounded,
+                        ),
+                        _buildInput(
+                          email,
+                          "Email",
+                          Icons.email_outlined,
+                          type: TextInputType.emailAddress,
+                        ),
+                        _buildInput(
+                          password,
+                          "Password",
+                          Icons.lock_outline_rounded,
+                          obscure: true,
+                        ),
 
-                  _buildDropdown(
-                    label: "Batch",
-                    icon: Icons.calendar_today_rounded,
-                    value: selectedBatchId,
-                    items: batchData
-                        .map(
-                          (item) => DropdownMenuItem<String>(
-                            value: item['id'].toString(),
-                            child: Text("Batch ${item['batch_ke']}"),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (val) => setState(() => selectedBatchId = val),
-                  ),
+                        _buildDropdown(
+                          label: "Batch",
+                          icon: Icons.calendar_today_rounded,
+                          value: selectedBatchId,
+                          items: listBatches
+                              .map(
+                                (item) => DropdownMenuItem<String>(
+                                  value: item.id.toString(),
+                                  child: Text("Batch ${item.batchKe}"),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: onBatchChanged,
+                        ),
 
-                  _buildDropdown(
-                    label: "Jurusan",
-                    icon: Icons.school_outlined,
-                    value: selectedTrainingId,
-                    items: trainingData
-                        .map(
-                          (item) => DropdownMenuItem<String>(
-                            value: item['id'].toString(),
-                            child: Text(
-                              item['title'],
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (val) =>
-                        setState(() => selectedTrainingId = val),
-                  ),
+                        _buildDropdown(
+                          label: selectedBatchId == null
+                              ? "Pilih Batch Dahulu"
+                              : "Jurusan",
+                          icon: Icons.school_outlined,
+                          value: selectedTrainingId,
+                          items: filteredTrainings
+                              .map(
+                                (item) => DropdownMenuItem<String>(
+                                  value: item.id.toString(),
+                                  child: Text(
+                                    item.title,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: selectedBatchId == null
+                              ? null
+                              : (val) =>
+                                  setState(() => selectedTrainingId = val),
+                        ),
 
-                  _buildDropdown(
-                    label: "Jenis Kelamin",
-                    icon: Icons.wc_rounded,
-                    value: selectedGender,
-                    items: ["Laki-laki", "Perempuan"]
-                        .map(
-                          (val) =>
-                              DropdownMenuItem(value: val, child: Text(val)),
-                        )
-                        .toList(),
-                    onChanged: (val) => setState(() => selectedGender = val),
-                  ),
-                ],
+                        _buildDropdown(
+                          label: "Jenis Kelamin",
+                          icon: Icons.wc_rounded,
+                          value: selectedGender,
+                          items: ["Laki-laki", "Perempuan"]
+                              .map(
+                                (val) => DropdownMenuItem(
+                                    value: val, child: Text(val)),
+                              )
+                              .toList(),
+                          onChanged: (val) =>
+                              setState(() => selectedGender = val),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 32),
+                    _buildRegisterButton(),
+                    const SizedBox(height: 20),
+                  ],
+                ),
               ),
-
-              const SizedBox(height: 32),
-              _buildRegisterButton(),
-              const SizedBox(height: 20),
-            ],
-          ),
-        ),
-      ),
+            ),
     );
   }
 
@@ -287,20 +357,22 @@ class _RegisterPageState extends State<RegisterPage>
     required IconData icon,
     required String? value,
     required List<DropdownMenuItem<String>> items,
-    required Function(String?) onChanged,
+    required void Function(String?)? onChanged,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
       child: DropdownButtonFormField<String>(
         isExpanded: true,
+        disabledHint: Text(label),
         icon: Icon(
           Icons.arrow_drop_down_circle_outlined,
-          color: primaryBlue.withOpacity(0.5),
+          color: primaryBlue.withOpacity(onChanged == null ? 0.2 : 0.5),
         ),
         decoration: InputDecoration(
           labelText: label,
           labelStyle: TextStyle(color: Colors.grey[500], fontSize: 14),
-          prefixIcon: Icon(icon, color: primaryBlue, size: 22),
+          prefixIcon: Icon(icon,
+              color: onChanged == null ? Colors.grey : primaryBlue, size: 22),
           border: UnderlineInputBorder(
             borderSide: BorderSide(color: Colors.grey[200]!),
           ),
@@ -348,33 +420,4 @@ class _RegisterPageState extends State<RegisterPage>
       ),
     );
   }
-
-  // DATA BATCH & TRAINING (Tetap)
-  final List<Map<String, dynamic>> batchData = [
-    {"id": 1, "batch_ke": "2"},
-    {"id": 2, "batch_ke": "3"},
-    {"id": 3, "batch_ke": "4"},
-    {"id": 4, "batch_ke": "5"},
-  ];
-
-  final List<Map<String, dynamic>> trainingData = [
-    {"id": 1, "title": "Data Management Staff (Operator Komputer)"},
-    {"id": 2, "title": "Bahasa Inggris"},
-    {"id": 3, "title": "Desainer Grafis Madya"},
-    {"id": 4, "title": "Tata Boga"},
-    {"id": 5, "title": "Tata Busana"},
-    {"id": 6, "title": "Perhotelan"},
-    {"id": 7, "title": "Teknisi Komputer"},
-    {"id": 8, "title": "Teknisi Jaringan"},
-    {"id": 9, "title": "Barista"},
-    {"id": 10, "title": "Bahasa Korea"},
-    {"id": 11, "title": "Make Up Artist"},
-    {"id": 12, "title": "Desainer Multimedia"},
-    {"id": 13, "title": "Content Creator"},
-    {"id": 14, "title": "Web Programming"},
-    {"id": 15, "title": "Digital Marketing"},
-    {"id": 16, "title": "Mobile Programming"},
-    {"id": 17, "title": "Akuntansi Junior"},
-    {"id": 18, "title": "Konstruksi Bangunan dengan CAD"},
-  ];
 }

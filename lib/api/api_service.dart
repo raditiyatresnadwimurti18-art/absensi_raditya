@@ -80,6 +80,13 @@ class ApiService {
     );
   }
 
+  static Future<http.Response> getBatches() async {
+    return await http.get(
+      Uri.parse("$baseUrl/batches"),
+      headers: {"Accept": "application/json"},
+    );
+  }
+
   // --------------------------------------------------------------------------
   // ATTENDANCE SECTION
   // --------------------------------------------------------------------------

@@ -16,8 +16,8 @@ class BatchModel {
   });
 
   factory BatchModel.fromJson(Map<String, dynamic> json) {
-    // Memetakan list training di dalam batch
-    var list = json['trainings'] as List;
+    // Memetakan list training di dalam batch secara aman
+    var list = json['trainings'] as List? ?? [];
     List<TrainingModel> trainingList = list
         .map((i) => TrainingModel.fromJson(i))
         .toList();
